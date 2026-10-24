@@ -1,0 +1,57 @@
+{
+  "summary": "First full E2E run of POSHub (backend pytest 30 tests + ~12 Playwright flows on desktop/mobile). Core flows work: role logins + landing routes, tenant isolation (API + UI register), POS tile/barcode add, 'Buy 3 coffees' auto discount, split card+cash payment with change, receipt OUTLET-DEVICE-SEQ, server total == client total (totals_mismatch=false), /sync idempotency (2nd send = duplicate, stock moved once), offline sale -> 'Saved offline' + pending badge -> Sync now -> 0 pending + 'offline' pill in /app/sales, stock guard (Pain au Chocolat capped at 8 with toast), supervisor PIN 9999 for Manager 25%, vouchers WELCOME10/MONSOON/FLAT75 messages, loyalty redeem 50 pts + ledger rows, restaurant T1/T2 send to kitchen split by station, KDS Start->Ready->Served, move + merge tables, paying table frees it, hold/resume, cash out + close register (expected 3511, diff shown, shift + cash rows in /app/shifts), products CRUD + CSV, inventory receive (moving avg correct 22.00) + adjust + ledger, promotions create, partial return, void, all 6 reports + CSV, settings tabs + staff create with PIN, cashier guarded from /app/dashboard & /app/products, cost hidden + /api/staff 403 for cashier, Arabic RTL, theme toggle, 390px mobile POS with bottom cart bar, Google button redirects to Google via Emergent auth. Found 1 HIGH frontend bug (wrong sale voided after search), 3 server-side trust/security gaps and broken brute-force lockout.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/sync (process_sale in backend/sales.py)", "issue": "Server does not re-validate vouchers: sale with voucher_code=MONSOON (expired) is accepted and the voucher discount applied (₹100 off). Also ignores outlet_ids/min_spend-quota/customer_ids checks. Reuse validate_voucher logic inside process_sale (for offline sales use sale created_at date).", "priority": "HIGH"},
+      {"endpoint": "POST /api/sync (process_sale)", "issue": "Cashier discount limit/supervisor approval is only enforced in the browser. Cashier can POST order_discount {type:percent,value:9000} (90%) and server accepts it. Server should check user.discount_limit_bps and require a supervisor_pin/approved_by (verified) when exceeded, and store approved_by on the sale.", "priority": "HIGH"},
+      {"endpoint": "POST /api/sync (process_sale)", "issue": "unit_price is trusted from client (sent unit_price=1 for Espresso priced 12000 -> accepted, total ₹0). When business.allow_price_edit is false, server must use product.price.", "priority": "HIGH"},
+      {"endpoint": "POST /api/auth/login", "issue": "Brute-force lockout ineffective: identifier = request.client.host + email, but behind the k8s ingress client.host rotates between proxy IPs (seen 10.227.0.x) so counts are split; 6 bad attempts then correct password -> 200, never 429. Use X-Forwarded-For first IP (or email only) for the identifier.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/vouchers/validate", "issue": "Expiry/start compare uses UTC date, not business tz_offset_min (IST voucher expires 5.5h late)."},
+      {"endpoint": "POST /api/sales/{id}/return", "issue": "No role/supervisor check (any cashier can refund cash); refund amount not rounded to rounding_unit (₹115.50 cash refund with ₹1 rounding); returns made in back office have no shift_id so cash refunds never hit a drawer; loyalty points earned are not reversed on return."},
+      {"endpoint": "POST /api/orders/{id}/send + PUT /api/orders/{id}", "issue": "Kitchen tickets keep the old table_name after Move/Merge (moved T1->T3, KDS still shows T1/T2)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Sales page (pages/Sales.jsx + components/common.jsx useFetch)", "issue": "WRONG SALE VOIDED: searched 'MGR-8RZD-00001', clicked first row, voided -> server voided MGR-5TZH-00002 instead. Root cause: useFetch has no stale-response guard; the initial '/sales?q=' response resolved after the filtered one and replaced the table rows, so row-0 was a different sale. Fix: ignore out-of-date responses (request id / AbortController) in useFetch and debounce the search; also show receipt no. clearly in confirmation before voiding.", "selector": "[data-testid='sales-search-input'], [data-testid='sales-table-row-0'], [data-testid='void-submit-btn']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Payment with named customer", "issue": "With a customer selected, 'Complete sale' with no payment lines silently creates a fully on-account sale (Ananya ₹326 on account). Consider an explicit confirm for credit sales.", "affected_selectors": ["[data-testid='complete-sale-btn']", "[data-testid='partial-payment-note']"]}
+    ],
+    "design_issues": [
+      {"screen": "Arabic (RTL) everywhere", "issues": ["Letter-spacing/tracking on font-display / uppercase headings breaks Arabic letter joining: 'ا د ف ع', 'ا ل إ ج م ا ل ي', 'ا ل ب ي ع ا ل ح ا ل ي', page title 'الإعدادات' rendered as disconnected letters. Set letter-spacing:0 (tracking-normal) for [dir=rtl] / :lang(ar).", "Back-office page bodies (tabs, table headers, subtitles) and 'Back to products' mobile bar are not translated."]},
+      {"screen": "Reports / Shifts cash tab / Promotions rule form", "issues": ["Native browser <input type=date/time> used instead of shadcn Calendar/Popover; Reports date inputs show empty mm/dd/yyyy while header shows 2026-09-25 -> 2026-10-24."]},
+      {"screen": "POS", "issues": ["Menu 'Language' item only cycles through 7 languages (EN->ID->AR...), no picker.", "Table tile shows gross (₹350) while order total is ₹351.", "Cart header reads 'Tables T3' (should be 'Table T3').", "Coffee Beans 250g and Gift Wrapping have no image (placeholder icon).", "Radix warning: DialogContent without DialogTitle (accessibility)."]},
+      {"screen": "Products", "issues": ["Delete product icon archives immediately with no confirmation."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_poshub_api.py", "/app/backend/tests/test_poshub_security.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "HIGH: fix useFetch stale-response race (Sales search -> wrong sale voided/returned); debounce search",
+    "HIGH: re-validate voucher (expiry/outlet/quota/min spend/customer) inside process_sale",
+    "HIGH: enforce cashier discount_limit_bps server-side with verified supervisor PIN; record approved_by",
+    "HIGH: ignore client unit_price unless business.allow_price_edit",
+    "HIGH: fix brute-force lockout identifier (use X-Forwarded-For or email)",
+    "Fix Arabic letter-spacing (tracking) breaking glyph joins; translate back-office page bodies",
+    "Update kitchen tickets table_name on move/merge",
+    "Returns: supervisor check for cashiers, round cash refunds to rounding_unit, link to shift, reverse earned points",
+    "Replace native date/time inputs with shadcn Calendar/time picker"
+  ],
+  "critical_code_review_comments": [
+    "process_sale trusts client for unit_price, order_discount, voucher validity – the 'same total calc on till and server' is satisfied but server is not authoritative.",
+    "process_op with offline=True (default when the flag is missing) disables strict stock: any API client can bypass negative-stock guard by omitting 'offline'. Default should be offline=False for direct API use, or only trust offline for ops whose created_at is older than now.",
+    "validate_voucher uses UTC 'today'; rule_active uses business tz – inconsistent.",
+    "crud() generic update allows any field (e.g. 'archived', 'used' on vouchers, 'outlet_ids') with no Pydantic validation; GET /rules, /vouchers, /suppliers readable by every role.",
+    "Return flow has no shift_id from back office -> shift expected cash ignores those refunds."
+  ],
+  "updated_files": ["/app/backend/tests/test_poshub_api.py", "/app/backend/tests/test_poshub_security.py"],
+  "success_rate": {"backend": "87% (26/30; 4 failures = MONSOON voucher accepted, discount limit bypass, price tampering, + brute force lockout verified separately)", "frontend": "92% (all requested flows work; 1 HIGH data-integrity bug in Sales search/void)"},
+  "test_credentials": "Used /app/memory/test_credentials.md (owner/manager/cashier/waiter/kitchen) – all valid. bcrypt $2b$ hashes confirmed, httpOnly cookies set, CORS rejects foreign origin.",
+  "seed_data_creation": "Created & cleaned: TEST_Widget product (archived), TEST_Preset 5% rule (archived), TEST_Staff (deactivated), TEST-xxxx API sales (voided). New TEST tenants registered (test_*@example.com, TEST_UI Biz). Real-flow sales kept: MGR-NSVV-00001 (1 espresso returned), MGR-H7TN-00001 (offline), MGR-5TZH-00001 (table T3), MGR-5TZH-00002 (accidentally voided by the race bug), MGR-8RZD-00001 (Ananya on-account, voided -> points back to 120). Indiranagar: Masala Chai +10 @₹30 purchase, -2 breakage. Cashier shift closed (counted ₹2500, diff -₹1011) and a new cashier shift opened with ₹1000 (MG Road).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=<url> pytest tests/test_poshub_api.py tests/test_poshub_security.py (pytest.ini adds -n xdist). test_server_ignores_unvalidated_voucher + test_poshub_security.py tests are expected to fail until server-side validation is added. To retest the Sales race: open /app/sales, fill search right after load, click row-0 and compare dialog receipt number. Each Playwright session gets a new device code so receipts restart at -00001 per device.",
+  "rca of the issue": "Wrong-sale void: Sales.jsx useFetch(`/sales?q=${q}`) fires a request on each q change; common.jsx useFetch sets data from whichever promise resolves last, without checking that url is still current. When the unfiltered initial request finishes after the filtered one, the table shows unfiltered rows under a filtered search box; row-0 then opens another sale and Void applies to it. Repro: load /app/sales, immediately type a receipt no., click first row before/around initial load. Mitigation: track a request counter/AbortController in useFetch and drop stale responses; debounce search input. Brute force: ident built from request.client.host which is the ingress pod IP (rotates), so attempts never reach 5 for one identifier."
+}

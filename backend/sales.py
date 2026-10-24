@@ -2,8 +2,10 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timezone, timedelta
+import os
+import jwt
 from core import db, uid, now_iso, get_user, require, get_business, settings_of, verify_pw, MANAGERS
-from pricing import compute, rdiv
+from pricing import compute, rdiv, local_parts, manual_amount
 
 router = APIRouter()
 
@@ -31,6 +33,30 @@ async def move_stock(bid, oid, pid, delta, ref_type, ref_id, cost=None, strict=F
                                       "unit_cost": unit_cost, "balance": lvl["qty"], "ref_type": ref_type, "ref_id": ref_id,
                                       "note": note, "created_at": ts or now_iso()})
     return unit_cost
+
+
+def voucher_reason(v, outlet_id, customer_id, date_str):
+    if not v or not v.get("active", True) or v.get("archived"):
+        return "No voucher with this code"
+    if v.get("end_date") and date_str > v["end_date"]:
+        return f"Expired on {v['end_date']}"
+    if v.get("start_date") and date_str < v["start_date"]:
+        return f"Not valid until {v['start_date']}"
+    if v.get("outlet_ids") and outlet_id not in v["outlet_ids"]:
+        return "Not valid at this branch"
+    if v.get("quota") and v.get("used", 0) >= v["quota"]:
+        return "Redemption quota used up"
+    if v.get("customer_ids") and customer_id not in v["customer_ids"]:
+        return "Not for this customer"
+    return None
+
+
+def approval_ok(token, bid):
+    try:
+        p = jwt.decode(token or "", os.environ["JWT_SECRET"], algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        return None
+    return p if p.get("type") == "approval" and p.get("bid") == bid else None
 
 
 async def points_balances(bid):
@@ -156,6 +182,11 @@ async def process_sale(user, p, offline):
     voucher = None
     if p.get("voucher_code"):
         voucher = await db.vouchers.find_one({"business_id": bid, "code": p["voucher_code"]}, {"_id": 0})
+        reason = voucher_reason(voucher, outlet["id"], p.get("customer_id"), local_parts(p["created_at"], b.get("tz_offset_min", 0))[0])
+        if reason:
+            if not offline:
+                raise HTTPException(400, f"Voucher rejected: {reason}")
+            voucher = None
     loyalty = b.get("loyalty") or {}
     pts_red = int(p.get("points_redeemed") or 0)
     if pts_red:
@@ -170,13 +201,24 @@ async def process_sale(user, p, offline):
         pr = prods.get(l["product_id"])
         if not pr:
             raise HTTPException(400, "Unknown product in sale")
+        price = int(l["unit_price"]) if (b.get("allow_price_edit") or offline) else pr["price"]
+        if int(l["qty"]) <= 0 or price < 0:
+            raise HTTPException(400, "Invalid quantity or price")
         lines.append({"product_id": pr["id"], "name": pr["name"], "category_id": pr.get("category_id"), "qty": int(l["qty"]),
-                      "unit_price": int(l["unit_price"]), "tax_bps": pr.get("tax_bps", 0), "manual_discount": l.get("manual_discount"),
+                      "unit_price": price, "price_override": price != pr["price"], "tax_bps": pr.get("tax_bps", 0), "manual_discount": l.get("manual_discount"),
                       "note": l.get("note"), "track_stock": pr.get("track_stock", True), "image": pr.get("image")})
     ctx = {"ts": p["created_at"], "tz_min": b.get("tz_offset_min", 0), "outlet_id": outlet["id"], "customer": customer}
     cart = {"lines": lines, "voucher": voucher, "order_discount": p.get("order_discount"),
             "points_value": pts_red * (loyalty.get("point_value") or 0)}
     t = compute(cart, rules, settings_of(b), ctx)
+    approved_by = None
+    manual_total = manual_amount(p.get("order_discount"), t["subtotal"]) + sum(
+        l["discount"] for l in t["lines"] if l["discount_source"] == "manual")
+    if manual_total > (t["subtotal"] + t["line_discount"]) * (user.get("discount_limit_bps") or 0) // 10000:
+        appr = approval_ok((p.get("order_discount") or {}).get("approval"), bid)
+        if not appr:
+            raise HTTPException(403, "Discount above your limit needs supervisor approval")
+        approved_by = appr["sub"]
     payments = [{"method": x["method"], "amount": int(x["amount"])} for x in p.get("payments", []) if int(x.get("amount", 0)) > 0]
     paid = sum(x["amount"] for x in payments)
     change = max(paid - t["total"], 0)
@@ -226,7 +268,8 @@ async def process_sale(user, p, offline):
             "points_redeemed": pts_red, "points_earned": earned, "currency": b["currency"], "status": "completed",
             "offline": offline, "client_total": p.get("client_total"),
             "totals_mismatch": p.get("client_total") is not None and p["client_total"] != t["total"],
-            "tax_inclusive": b.get("tax_inclusive", False), "created_at": p["created_at"], "synced_at": now_iso()}
+            "tax_inclusive": b.get("tax_inclusive", False), "discount_approved_by": approved_by,
+            "created_at": p["created_at"], "synced_at": now_iso()}
     try:
         await db.sales.insert_one(sale)
     except DuplicateKeyError:
@@ -287,7 +330,11 @@ async def process_op(user, op):
     bid = user["business_id"]
     t, p = op["type"], op["payload"]
     if t == "sale":
-        return await process_sale(user, p, op.get("offline", True))
+        offline = bool(op.get("offline", False))
+        if offline:
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(p["created_at"].replace("Z", "+00:00"))
+            offline = age > timedelta(seconds=30)
+        return await process_sale(user, p, offline)
     seen = await db.sync_ops.find_one({"business_id": bid, "client_id": op["client_id"]})
     if seen:
         return {"status": "duplicate"}
@@ -322,7 +369,7 @@ async def sync(data: dict = Body(...), user=Depends(get_user)):
             results.append({"client_id": op["client_id"], "ok": True, **r})
         except HTTPException as e:
             results.append({"client_id": op["client_id"], "ok": False, "error": e.detail, "code": e.status_code})
-            if op["type"] != "sale" or not op.get("offline", True):
+            if op["type"] != "sale" or not op.get("offline", False):
                 break
     return {"results": results}
 
@@ -385,9 +432,11 @@ async def void_sale(sid: str, data: dict = Body(...), user=Depends(get_user)):
 @router.post("/sales/{sid}/return")
 async def return_sale(sid: str, data: dict = Body(...), user=Depends(get_user)):
     bid = user["business_id"]
+    await _authorize_supervisor(user, data.get("supervisor_pin"))
     s = await db.sales.find_one({"id": sid, "business_id": bid}, {"_id": 0})
     if not s or s["status"] != "completed":
         raise HTTPException(400, "Only completed sales can be returned")
+    b = await get_business(bid)
     prev = await db.returns.find({"sale_id": sid}).to_list(100)
     done = {}
     for r in prev:
@@ -410,6 +459,9 @@ async def return_sale(sid: str, data: dict = Body(...), user=Depends(get_user)):
     if not out:
         raise HTTPException(400, "Choose at least one item to return")
     method = data.get("refund_method", "cash")
+    unit = b.get("rounding_unit") or 0
+    if method == "cash" and unit > 1:
+        amount = rdiv(amount, unit) * unit
     if method == "store_credit":
         if not s.get("customer_id"):
             raise HTTPException(400, "Store credit needs a customer on the sale")
@@ -420,6 +472,11 @@ async def return_sale(sid: str, data: dict = Body(...), user=Depends(get_user)):
            "by": user["id"], "by_name": user["name"], "created_at": now_iso()}
     await db.returns.insert_one(doc)
     doc.pop("_id", None)
+    if s.get("customer_id") and s.get("points_earned") and s["total"]:
+        back = s["points_earned"] * amount // s["total"]
+        if back:
+            await db.points_ledger.insert_one({"id": uid("pts_"), "business_id": bid, "customer_id": s["customer_id"], "type": "adjusted",
+                                               "points": -back, "ref_id": rid, "note": f"Return on {s['receipt_no']}", "created_at": now_iso()})
     return doc
 
 
@@ -484,6 +541,8 @@ async def update_order(oid: str, data: dict = Body(...), user=Depends(get_user))
                                                  projection={"_id": 0}, return_document=ReturnDocument.AFTER)
     if not r:
         raise HTTPException(404, "Order not found")
+    if upd.get("table_name"):
+        await db.kitchen_tickets.update_many({"business_id": user["business_id"], "order_id": oid}, {"$set": {"table_name": upd["table_name"]}})
     return r
 
 
@@ -519,6 +578,8 @@ async def merge_orders(oid: str, data: dict = Body(...), user=Depends(get_user))
         raise HTTPException(400, "Choose two different open orders")
     await db.open_orders.update_one({"id": oid}, {"$set": {"lines": a["lines"] + b["lines"]}})
     await db.open_orders.update_one({"id": b["id"]}, {"$set": {"status": "merged", "merged_into": oid}})
+    await db.kitchen_tickets.update_many({"business_id": bid, "order_id": b["id"]},
+                                         {"$set": {"order_id": oid, "table_name": a.get("table_name") or a.get("label") or "Takeaway"}})
     return {"ok": True}
 
 

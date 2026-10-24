@@ -48,7 +48,7 @@ async def register(response: Response, data: dict = Body(...)):
 @api.post("/auth/login")
 async def login(request: Request, response: Response, data: dict = Body(...)):
     email = (data.get("email") or "").strip().lower()
-    ident = f"{request.client.host if request.client else 'x'}:{email}"
+    ident = f"{(request.headers.get('x-forwarded-for') or '').split(',')[0].strip() or (request.client.host if request.client else 'x')}:{email}"
     att = await db.login_attempts.find_one({"identifier": ident})
     if att and att.get("count", 0) >= 5 and att.get("locked_until", "") > now_iso():
         raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
@@ -133,7 +133,9 @@ async def supervisor(data: dict = Body(...), user=Depends(get_user)):
     u = await _find_by_pin(user["business_id"], str(data.get("pin", "")))
     if not u or u["role"] not in MANAGERS:
         raise HTTPException(401, "Supervisor PIN not recognised")
-    return {"ok": True, "supervisor_id": u["id"], "name": u["name"], "limit_bps": u.get("discount_limit_bps", 10000)}
+    token = jwt.encode({"sub": u["id"], "bid": user["business_id"], "type": "approval", "for": user["id"],
+                        "exp": datetime.now(timezone.utc) + timedelta(hours=24)}, os.environ["JWT_SECRET"], algorithm="HS256")
+    return {"ok": True, "supervisor_id": u["id"], "name": u["name"], "approval": token}
 
 
 # ---------------- Business settings ----------------
@@ -166,7 +168,7 @@ def crud(name, coll, prefix, write_roles=MANAGERS, sort="name"):
 
     @api.put(f"/{name}/{{item_id}}", name=f"update_{name}")
     async def _update(item_id: str, data: dict = Body(...), user=Depends(require(*write_roles))):
-        upd = {k: v for k, v in data.items() if k not in ("id", "business_id", "_id", "created_at")}
+        upd = {k: v for k, v in data.items() if k not in ("id", "business_id", "_id", "created_at", "archived", "used")}
         r = await db[coll].find_one_and_update({"id": item_id, "business_id": user["business_id"]}, {"$set": upd},
                                                projection={"_id": 0}, return_document=True)
         if not r:
@@ -294,19 +296,11 @@ async def update_staff(sid: str, data: dict = Body(...), user=Depends(require(*M
 @api.get("/vouchers/validate")
 async def validate_voucher(code: str, outlet_id: str, subtotal: int = 0, customer_id: str = None, user=Depends(get_user)):
     v = await db.vouchers.find_one({"business_id": user["business_id"], "code": code.strip().upper(), "archived": {"$ne": True}}, {"_id": 0})
-    if not v or not v.get("active", True):
-        return {"ok": False, "reason": "No voucher with this code"}
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    if v.get("end_date") and today > v["end_date"]:
-        return {"ok": False, "reason": f"Expired on {v['end_date']}"}
-    if v.get("start_date") and today < v["start_date"]:
-        return {"ok": False, "reason": f"Not valid until {v['start_date']}"}
-    if v.get("outlet_ids") and outlet_id not in v["outlet_ids"]:
-        return {"ok": False, "reason": "Not valid at this branch"}
-    if v.get("quota") and v.get("used", 0) >= v["quota"]:
-        return {"ok": False, "reason": "Redemption quota used up"}
-    if v.get("customer_ids") and customer_id not in v["customer_ids"]:
-        return {"ok": False, "reason": "Not for this customer"}
+    b = await get_business(user["business_id"])
+    today = (datetime.now(timezone.utc) + timedelta(minutes=b.get("tz_offset_min", 0))).strftime("%Y-%m-%d")
+    reason = sales.voucher_reason(v, outlet_id, customer_id, today)
+    if reason:
+        return {"ok": False, "reason": reason}
     if subtotal < (v.get("min_spend") or 0):
         return {"ok": False, "reason": "Minimum spend not reached", "min_spend": v.get("min_spend")}
     return {"ok": True, "voucher": v}

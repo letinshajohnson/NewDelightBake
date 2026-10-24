@@ -27,9 +27,9 @@ export default function DiscountDialog({ open, onOpenChange, presets, subtotal, 
   };
   const supervisorOk = async (pin) => {
     try {
-      await api.post("/auth/supervisor", { pin });
-      setCart((c) => ({ ...c, order_discount: { ...pending, approved: true } }));
-      toast.success("Approved by supervisor");
+      const { data } = await api.post("/auth/supervisor", { pin });
+      setCart((c) => ({ ...c, order_discount: { ...pending, approval: data.approval } }));
+      toast.success(`Approved by ${data.name}`);
       setPending(null);
       onOpenChange(false);
     } catch { toast.error(navigator.onLine ? "Supervisor PIN not recognised" : "Supervisor approval needs a connection"); }

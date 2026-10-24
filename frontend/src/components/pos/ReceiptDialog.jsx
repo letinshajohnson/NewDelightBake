@@ -1,4 +1,4 @@
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer, CloudOff, CheckCircle2 } from "lucide-react";
 import { fmt } from "@/lib/money";
@@ -16,6 +16,7 @@ export default function ReceiptDialog({ receipt, onClose, business, outlet }) {
   return (
     <Dialog open={!!receipt} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm" data-testid="receipt-dialog">
+        <DialogTitle className="sr-only">Receipt</DialogTitle>
         <div className="flex items-center gap-2 text-success font-medium">
           <CheckCircle2 className="w-5 h-5" />Sale complete
           {r.offline && <span className="ms-auto inline-flex items-center gap-1 text-xs text-warning" data-testid="receipt-offline-flag"><CloudOff className="w-3.5 h-3.5" />Saved offline — will sync</span>}

@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ function SaleDetail({ id, onClose, currency, user, onChanged }) {
   };
   const doReturn = async () => {
     const lines = Object.entries(ret).filter(([, q]) => q > 0).map(([index, qty]) => ({ index: +index, qty }));
-    try { const { data } = await api.post(`/sales/${id}/return`, { lines, refund_method: method, reason }); toast.success(`Refunded ${fmt(data.amount, currency)}`); setRet({}); reload(); onChanged(); }
+    try { const { data } = await api.post(`/sales/${id}/return`, { lines, refund_method: method, reason, supervisor_pin: pin }); toast.success(`Refunded ${fmt(data.amount, currency)}`); setRet({}); reload(); onChanged(); }
     catch (e) { toast.error(errMsg(e)); }
   };
   return (
@@ -73,7 +73,7 @@ function SaleDetail({ id, onClose, currency, user, onChanged }) {
                   <Button variant="outline" onClick={doReturn} disabled={!Object.values(ret).some((q) => q > 0)} data-testid="return-submit-btn">Return selected</Button>
                   <div className="flex-1" />
                   {!isManager(user) && <Input placeholder="Supervisor PIN" type="password" value={pin} onChange={(e) => setPin(e.target.value)} className="w-36" data-testid="void-pin-input" />}
-                  <Button variant="destructive" onClick={doVoid} disabled={!reason || (s.returns || []).length > 0} data-testid="void-submit-btn">Void sale</Button>
+                  <Button variant="destructive" onClick={doVoid} disabled={!reason || (s.returns || []).length > 0} data-testid="void-submit-btn">Void #{s.receipt_no}</Button>
                 </div>
               </div>
             )}
@@ -88,7 +88,9 @@ export default function Sales() {
   const { business, user } = useAuth();
   const { t } = useI18n();
   const c = business.currency;
+  const [term, setTerm] = useState("");
   const [q, setQ] = useState("");
+  useEffect(() => { const h = setTimeout(() => setQ(term), 350); return () => clearTimeout(h); }, [term]);
   const { data, reload } = useFetch(`/sales?q=${encodeURIComponent(q)}`, [q]);
   const [sel, setSel] = useState(null);
   const failed = queue.failed();
@@ -107,7 +109,7 @@ export default function Sales() {
           <Button size="sm" variant="outline" className="mt-2" onClick={() => { queue.clearFailed(); reload(); }} data-testid="clear-failed-btn">Dismiss</Button>
         </div>
       )}
-      <Input placeholder="Search receipt number…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs mb-4" data-testid="sales-search-input" />
+      <Input placeholder="Search receipt number…" value={term} onChange={(e) => setTerm(e.target.value)} className="max-w-xs mb-4" data-testid="sales-search-input" />
       <DataTable columns={cols} rows={data || []} currency={c} testid="sales-table" onRow={(r) => setSel(r.id)} />
       <SaleDetail id={sel} onClose={() => setSel(null)} currency={c} user={user} onChanged={reload} />
     </div>

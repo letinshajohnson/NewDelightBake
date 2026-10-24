@@ -63,7 +63,7 @@ export default function PaymentDialog({ open, onOpenChange, total, currency, met
           {remaining > 0 && customer && <div className="text-xs text-warning" data-testid="partial-payment-note">{fmt(remaining, currency)} will go on {customer.name}'s account</div>}
         </div>
         <Button className="h-14 text-lg active:scale-[0.98]" disabled={!canFinish || busy || (remaining > 0 && !customer)} onClick={() => onPay(pays)} data-testid="complete-sale-btn">
-          {busy ? "…" : t("complete")}
+          {busy ? "…" : remaining > 0 && customer ? `Put ${fmt(remaining, currency)} on ${customer.name}'s account` : t("complete")}
         </Button>
       </DialogContent>
     </Dialog>

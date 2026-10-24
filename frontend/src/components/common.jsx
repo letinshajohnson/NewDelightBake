@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Moon, Sun, Languages, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -12,12 +12,14 @@ import { toast } from "sonner";
 export function useFetch(url, deps = []) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const latest = useRef(0);
   const reload = useCallback(async () => {
     if (!url) return;
+    const id = ++latest.current;
     setLoading(true);
-    try { const r = await api.get(url); setData(r.data); }
-    catch (e) { toast.error(errMsg(e)); }
-    finally { setLoading(false); }
+    try { const r = await api.get(url); if (id === latest.current) setData(r.data); }
+    catch (e) { if (id === latest.current) toast.error(errMsg(e)); }
+    finally { if (id === latest.current) setLoading(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, ...deps]);
   useEffect(() => { reload(); }, [reload]);

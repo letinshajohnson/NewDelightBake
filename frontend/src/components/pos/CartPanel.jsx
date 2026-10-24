@@ -39,7 +39,7 @@ export default function CartPanel({ cart, totals, currency, business, a, canPay 
     <div className="flex flex-col h-full min-h-0 bg-card">
       <div className="px-4 py-3 border-b flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="font-display font-semibold">{order?.table_name ? `${t("tables")} ${order.table_name}` : order ? order.label || t("held") : t("cart")}</div>
+          <div className="font-display font-semibold">{order?.table_name ? `Table ${order.table_name}` : order ? order.label || t("held") : t("cart")}</div>
           {order?.table_id && (
             <div className="flex gap-1 mt-1">
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={a.moveTable} data-testid="move-table-btn"><ArrowLeftRight className="w-3 h-3 me-1" />Move</Button>

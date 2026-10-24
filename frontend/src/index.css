@@ -67,6 +67,9 @@
     [dir="rtl"] body, [dir="rtl"] {
         font-family: "IBM Plex Sans Arabic", "IBM Plex Sans", sans-serif;
     }
+    [dir="rtl"] *, :lang(ar) * {
+        letter-spacing: 0 !important;
+    }
     h1, h2, h3, .font-display {
         font-family: "Outfit", sans-serif;
     }
