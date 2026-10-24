@@ -1,0 +1,110 @@
+{
+  "theme_strategy": "Hybrid 'Performance Pro' & 'Swiss High-Contrast'. The web panel favors crisp, high-contrast structural grayscale, while the Cashier Screen and Kitchen Display lean into an elite, command-center dark mode (Obsidian base) with high-visibility kinetic triggers. Full Light/Dark toggle support across all panels.",
+  "typography": {
+    "headings": {
+      "font": "Outfit, sans-serif",
+      "weights": ["400", "600", "700"],
+      "rules": "Tracking-tight for all headers above text-2xl. Use for Page Titles, Cart Totals, and Dashboard KPI numbers."
+    },
+    "body": {
+      "font": "IBM Plex Sans, sans-serif",
+      "weights": ["400", "500", "600"],
+      "rules": "Optimal for tabular data, numbers, and dense POS item lists. Leading-relaxed for readability."
+    },
+    "arabic_rtl": {
+      "font": "IBM Plex Sans Arabic",
+      "rules": "Ensure all layout grids flip via dir='rtl' classes (e.g., ms-4 instead of ml-4)."
+    }
+  },
+  "colors": {
+    "dark": {
+      "background": "#0A0A0A",
+      "surface": "#141414",
+      "surface_elevated": "#1F1F1F",
+      "border": "#262626",
+      "text_primary": "#FFFFFF",
+      "text_secondary": "#A1A1AA"
+    },
+    "light": {
+      "background": "#F5F5F7",
+      "surface": "#FFFFFF",
+      "surface_elevated": "#F0F0F0",
+      "border": "#E5E7EB",
+      "text_primary": "#171717",
+      "text_secondary": "#52525B"
+    },
+    "brand": {
+      "primary": "#0A84FF",
+      "primary_hover": "#0070DF",
+      "success": "#30D158",
+      "warning": "#FF9F0A",
+      "danger": "#FF3B30",
+      "offline": "#FF9F0A"
+    },
+    "rules": "Never use pure transparent backgrounds for overlays. Use tinted grays. Avoid full-screen gradients. Provide stark contrast for POS elements (e.g., Bright red 'Clear Cart' button)."
+  },
+  "layouts": {
+    "merchant_panel": {
+      "structure": "Sidebar (w-64) + Main Content (flex-1).",
+      "grid": "Bento Protocol Mode B (High Density). Use grid-cols-1 md:grid-cols-3 lg:grid-cols-4 with gap-6.",
+      "cards": "Flat, sharp edges (rounded-lg max 8px). 1px border. No soft shadows. Use Grid Borders technique."
+    },
+    "cashier_pos": {
+      "structure": "Mobile-first responsive. Desktop: Grid cols-12. Left section (Products) spans col-span-8 or 9. Right section (Cart/Till) spans col-span-4 or 3.",
+      "product_grid": "Grid Borders style. border-collapse, minimal gaps, large touch targets (min h-16).",
+      "cart_panel": "Sticky right sidebar. h-[calc(100vh-4rem)]. Overflow-y-auto. Tactile Neumorphism for the numpad/quick cash buttons.",
+      "touch_targets": "Ensure all actionable buttons are min h-12 to h-14 for touch-friendly POS operation."
+    },
+    "kitchen_display": {
+      "structure": "Command center horizontal layout. Multi-column Kanban board for tickets.",
+      "ticket_card": "High contrast. Timers must use tabular-nums. Color-code ticket headers based on time (Green < 10m, Yellow > 10m, Red > 20m)."
+    },
+    "restaurant_map": {
+      "structure": "Interactive canvas area. Tables represented as absolute positioned nodes or flex-wrap shapes.",
+      "table_status": "Use border colors and subtle pulses for table states (Available, Occupied, Ordered, Paying)."
+    }
+  },
+  "visual_enhancers": {
+    "surfaces": "Use 'Tactile Neumorphism' for POS NumPad (1px sharp border + soft drop shadow). Use 'Grid Borders' for dashboard tables.",
+    "offline_badge": "Must feature a glowing pulse animation (framer-motion or ping tailwind class) when in offline/sync-pending mode.",
+    "modals": "Payment and Checkout Modals must use 'Crystal Glass' backdrop-blur-xl bg-black/60 (dark) or bg-white/70 (light) to retain context."
+  },
+  "component_rules": {
+    "general": "Use raw HTML/Tailwind for macro layouts. ALWAYS use Shadcn for Form, Select, Dialog, Dropdown, Table, and Tabs.",
+    "buttons": "Sharp buttons (rounded-md max). Use scale-down on active state (active:scale-95) for tactile POS feedback.",
+    "tables": "Dashboard data tables must use row striping or 1px bottom borders. Align monetary values right.",
+    "toasts": "Use Sonner for offline sync notifications and system alerts. Position bottom-right for Dashboard, top-center for POS.",
+    "charts": "Use Recharts (via Shadcn) for Merchant Dashboard. Monochrome bars or lines with primary brand color accents."
+  },
+  "accessibility": {
+    "contrast": "Ensure POS items and text pass WCAG AA. Avoid gray-on-gray.",
+    "motion": "Respect prefers-reduced-motion. Disable intense pulses if set.",
+    "testing": "All interactive elements MUST have data-testid (e.g., data-testid='pos-add-to-cart', data-testid='checkout-button')."
+  },
+  "image_urls": [
+    {
+      "url": "https://images.pexels.com/photos/6612572/pexels-photo-6612572.jpeg",
+      "category": "merchant_context",
+      "description": "Modern coffee shop interior for login screen background or hero."
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1561758033-d89a9ad46330",
+      "category": "dummy_product",
+      "description": "High quality burger and fries for POS product grid population."
+    },
+    {
+      "url": "https://images.unsplash.com/photo-1556742031-c6961e8560b0",
+      "category": "payment_context",
+      "description": "Cashier scanning payment, useful for onboarding or empty states."
+    }
+  ],
+  "instructions_to_main_agent": [
+    "Execute the 'Performance Pro' archetype for the POS and Kitchen screens. They must feel like high-end tactical interfaces, not standard SaaS apps.",
+    "Implement the offline-first logic visually with a distinct top-bar badge (yellow/orange) that says 'Pending Sync' with a 'Sync Now' CTA.",
+    "POS screen on mobile must hide the product grid behind a toggle or stack vertically with the cart fixed at the bottom sheet.",
+    "For multi-language/Arabic, wrap the application layout in a dir wrapper based on language state. Rely on Tailwind's logical properties (e.g., ps-4, pe-4, ms-4).",
+    "Install required icons: yarn add @phosphor-icons/react (best for dense dashboard and POS action buttons).",
+    "Avoid using generic centered content. Make aggressive use of space and alignment."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": "Do not converge toward generic AI slop. Create depth with z-index hierarchy and 1px sharp borders. Do not use dark colors as gradients. Do NOT apply universal transitions ('transition: all') to avoid breaking transforms. Do NOT center align the app container. Never use AI emojis for icons. Use Phosphor Icons. Ensure all interactive elements have data-testid attributes for testing. Prioritize reusing Shadcn components (Sonner, Dialog, Table, Tabs)."
+}
