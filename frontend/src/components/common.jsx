@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Moon, Sun, Languages, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,11 @@ export function useFetch(url, deps = []) {
   return { data, loading, reload, setData };
 }
 
+export const EmbedCtx = createContext(false);
+
 export function PageHeader({ title, sub, children }) {
+  const embedded = useContext(EmbedCtx);
+  if (embedded) return children ? <div className="flex flex-wrap gap-2 justify-end mb-4">{children}</div> : null;
   return (
     <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-8 fade-up">
       <div>

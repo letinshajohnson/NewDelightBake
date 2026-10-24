@@ -12,12 +12,18 @@ import { api, errMsg } from "@/lib/api";
 import { fmt, toMinor, toMajorStr, pctStr, toBps } from "@/lib/money";
 import { PageHeader, DataTable, Field, useFetch, ExportBtn, exportCSV } from "@/components/common";
 
-const blank = { name: "", sku: "", barcode: "", category_id: "", price: "", cost: "", tax: "5", image: "", station: "kitchen", track_stock: true, low_stock: "10", points: "0" };
+const blank = { name: "", sku: "", barcode: "", category_id: "", price: "", cost: "", tax: "5", image: "", station: "none", track_stock: true, low_stock: "10", points: "0", brand_id: "", unit_id: "", rack_id: "", wholesale: "" };
+
+const Pick = ({ url, value, onChange, testid }) => {
+  const { data } = useFetch(url);
+  return <select className="w-full h-9 rounded-md border bg-background px-2 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value)} data-testid={testid}><option value="">—</option>{(data || []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>;
+};
 
 function ProductForm({ edit, setEdit, cats, currency, onSaved }) {
   const set = (k) => (e) => setEdit({ ...edit, [k]: e.target.value });
   const save = async () => {
-    const body = { ...edit, price: toMinor(edit.price, currency), cost: toMinor(edit.cost, currency), tax_bps: toBps(edit.tax), station: edit.station === "none" ? null : edit.station };
+    const body = { ...edit, price: toMinor(edit.price, currency), cost: toMinor(edit.cost, currency), tax_bps: toBps(edit.tax), station: edit.station === "none" ? null : edit.station,
+      level_prices: edit.wholesale ? { wholesale: toMinor(edit.wholesale, currency) } : {} };
     try {
       edit.id ? await api.put(`/products/${edit.id}`, body) : await api.post("/products", body);
       toast.success("Product saved"); setEdit(null); onSaved();
@@ -44,6 +50,10 @@ function ProductForm({ edit, setEdit, cats, currency, onSaved }) {
             </Field>
             <Field label="Selling price"><Input value={edit.price} onChange={set("price")} inputMode="decimal" data-testid="product-price-input" /></Field>
             <Field label="Cost (opening)"><Input value={edit.cost} onChange={set("cost")} inputMode="decimal" data-testid="product-cost-input" /></Field>
+            <Field label="Wholesale price (customer type)"><Input value={edit.wholesale} onChange={set("wholesale")} inputMode="decimal" data-testid="product-wholesale-input" /></Field>
+            <Field label="Brand"><Pick url="/brands" value={edit.brand_id} onChange={(v) => setEdit({ ...edit, brand_id: v })} testid="product-brand-select" /></Field>
+            <Field label="Unit"><Pick url="/units" value={edit.unit_id} onChange={(v) => setEdit({ ...edit, unit_id: v })} testid="product-unit-select" /></Field>
+            <Field label="Rack"><Pick url="/racks" value={edit.rack_id} onChange={(v) => setEdit({ ...edit, rack_id: v })} testid="product-rack-select" /></Field>
             <Field label="Tax %"><Input value={edit.tax} onChange={set("tax")} inputMode="decimal" data-testid="product-tax-input" /></Field>
             <Field label="Loyalty points per unit"><Input value={edit.points} onChange={set("points")} inputMode="numeric" data-testid="product-points-input" /></Field>
             <Field label="Barcode"><Input value={edit.barcode} onChange={set("barcode")} data-testid="product-barcode-input" /></Field>
@@ -72,12 +82,12 @@ export default function Products() {
   const rows = (prods || []).filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.barcode?.includes(q));
   const cols = [
     { key: "image", label: "", render: (p) => p.image ? <img src={p.image} alt="" className="w-10 h-10 object-cover rounded" /> : <div className="w-10 h-10 bg-muted rounded" /> },
-    { key: "name", label: "Name" }, { key: "cat", label: "Category", render: (p) => catName[p.category_id] || "—" },
+    { key: "name", label: "Name" }, { key: "cat", label: "Category", render: (p) => <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: (cats || []).find((x) => x.id === p.category_id)?.color }} />{catName[p.category_id] || "—"}</span> },
     { key: "barcode", label: "Barcode" }, { key: "tax_bps", label: "Tax", render: (p) => pctStr(p.tax_bps) },
     { key: "cost", label: "Cost", money: true }, { key: "price", label: "Price", money: true },
     { key: "x", label: "", render: (p) => <Button size="icon" variant="ghost" onClick={async (e) => { e.stopPropagation(); await api.delete(`/products/${p.id}`); reload(); }} data-testid={`delete-product-${p.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button> },
   ];
-  const open = (p) => setEdit({ ...blank, ...p, price: toMajorStr(p.price, c), cost: toMajorStr(p.cost || 0, c), tax: String((p.tax_bps || 0) / 100), low_stock: String(p.low_stock || 0), points: String(p.points || 0) });
+  const open = (p) => setEdit({ ...blank, ...p, price: toMajorStr(p.price, c), cost: toMajorStr(p.cost || 0, c), tax: String((p.tax_bps || 0) / 100), low_stock: String(p.low_stock || 0), points: String(p.points || 0), wholesale: p.level_prices?.wholesale ? toMajorStr(p.level_prices.wholesale, c) : "" });
   return (
     <div>
       <PageHeader title={t("products")} sub="Catalogue shared by every branch. Cost here seeds the moving average; purchases update it.">

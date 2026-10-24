@@ -8,14 +8,9 @@ import { api, errMsg } from "@/lib/api";
 import AppShell from "@/components/AppShell";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
-import Products from "@/pages/Products";
-import Inventory from "@/pages/Inventory";
 import Promotions from "@/pages/Promotions";
-import Customers from "@/pages/Customers";
-import Sales from "@/pages/Sales";
 import Shifts from "@/pages/Shifts";
-import Reports from "@/pages/Reports";
-import Settings from "@/pages/Settings";
+import Section from "@/pages/Section";
 import POS from "@/pages/POS";
 import Kitchen from "@/pages/Kitchen";
 
@@ -55,15 +50,12 @@ function AppRouter() {
       <Route path="/pos" element={<Guard allow={(u) => u.role !== "kitchen"}><POS /></Guard>} />
       <Route path="/kitchen" element={<Guard><Kitchen /></Guard>} />
       <Route path="/app" element={<Guard allow={staffPanel}><AppShell /></Guard>}>
-        <Route path="dashboard" element={<Guard allow={isManager}><Dashboard /></Guard>} />
-        <Route path="products" element={<Guard allow={isManager}><Products /></Guard>} />
-        <Route path="inventory" element={<Guard allow={isManager}><Inventory /></Guard>} />
         <Route path="promotions" element={<Guard allow={isManager}><Promotions /></Guard>} />
-        <Route path="customers" element={<Customers />} />
-        <Route path="sales" element={<Sales />} />
+        <Route path="dashboard" element={<Guard allow={isManager}><Dashboard /></Guard>} />
         <Route path="shifts" element={<Shifts />} />
-        <Route path="reports" element={<Guard allow={isManager}><Reports /></Guard>} />
-        <Route path="settings" element={<Guard allow={isManager}><Settings /></Guard>} />
+        <Route path="customers" element={<Navigate to="/app/crm/customers" replace />} />
+        <Route path="sales" element={<Navigate to="/app/sales/transactions" replace />} />
+        <Route path=":section/:tab?" element={<Section />} />
       </Route>
       <Route path="*" element={<Guard><HomeRedirect /></Guard>} />
     </Routes>

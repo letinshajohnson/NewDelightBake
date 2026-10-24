@@ -8,6 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 from seed import seed_all
 import sales
 import reports
+import backoffice
 
 app = FastAPI(title="POSHub")
 api = APIRouter(prefix="/api")
@@ -140,7 +141,7 @@ async def supervisor(data: dict = Body(...), user=Depends(get_user)):
 
 # ---------------- Business settings ----------------
 BUSINESS_FIELDS = ("name", "currency", "tz_offset_min", "tax_inclusive", "service_bps", "rounding_unit", "restaurant_mode",
-                   "allow_price_edit", "loyalty", "payment_methods", "receipt_footer", "levels")
+                   "allow_price_edit", "loyalty", "payment_methods", "receipt_footer", "levels", "prefixes", "notifications", "realtime", "receipt", "price_levels")
 
 
 @api.put("/business")
@@ -188,10 +189,14 @@ crud("suppliers", "suppliers", "sup_")
 crud("rules", "rules", "rule_", sort="created_at")
 crud("vouchers", "vouchers", "vch_", sort="code")
 crud("customers", "customers", "cus_", ("owner", "manager", "cashier", "waiter"))
+for _n in ("units", "racks", "brands", "levels", "rewards", "cash_categories", "taxes", "charges"):
+    crud(_n.replace("_", "-"), _n, _n[:3] + "_")
+crud("roles", "roles", "rol_", ("owner",))
 
 
 # ---------------- Products ----------------
-PRODUCT_FIELDS = ("name", "sku", "barcode", "category_id", "price", "cost", "tax_bps", "image", "station", "track_stock", "low_stock", "points")
+PRODUCT_FIELDS = ("name", "sku", "barcode", "category_id", "price", "cost", "tax_bps", "image", "station", "track_stock", "low_stock", "points",
+                  "brand_id", "unit_id", "rack_id", "level_prices", "made_in_house")
 
 
 def _product_data(data):
@@ -260,7 +265,7 @@ async def create_staff(data: dict = Body(...), user=Depends(require(*MANAGERS)))
     if role not in ("manager", "cashier", "waiter", "kitchen") or (user["role"] == "manager" and role == "manager"):
         raise HTTPException(403, "You cannot create this role")
     doc = {"id": uid("usr_"), "business_id": user["business_id"], "email": email, "name": data["name"], "role": role,
-           "outlet_id": data.get("outlet_id") or None, "discount_limit_bps": int(data.get("discount_limit_bps") or 0),
+           "outlet_id": data.get("outlet_id") or None, "discount_limit_bps": int(data.get("discount_limit_bps") or 0), "role_id": data.get("role_id"),
            "active": True, "created_at": now_iso()}
     if data.get("password"):
         doc["password_hash"] = hash_pw(data["password"])
@@ -279,7 +284,7 @@ async def update_staff(sid: str, data: dict = Body(...), user=Depends(require(*M
         raise HTTPException(404, "Staff not found")
     if target["role"] == "owner" and user["role"] != "owner":
         raise HTTPException(403, "Only the owner can edit the owner")
-    upd = {k: data[k] for k in ("name", "role", "outlet_id", "discount_limit_bps", "active") if k in data}
+    upd = {k: data[k] for k in ("name", "role", "outlet_id", "discount_limit_bps", "active", "role_id") if k in data}
     if "role" in upd and upd["role"] != target["role"] and (target["role"] == "owner" or upd["role"] == "owner"):
         raise HTTPException(403, "Owner role cannot be changed")
     if data.get("password"):
@@ -339,6 +344,7 @@ async def root():
 
 api.include_router(sales.router)
 api.include_router(reports.router)
+api.include_router(backoffice.router)
 app.include_router(api)
 
 app.add_middleware(CORSMiddleware, allow_origins=[os.environ["FRONTEND_URL"]], allow_credentials=True,

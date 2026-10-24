@@ -4,12 +4,12 @@ import { Input } from "@/components/ui/input";
 import { fmt } from "@/lib/money";
 import { useI18n } from "@/lib/i18n";
 
-function Tile({ p, currency, onAdd, i }) {
+function Tile({ p, currency, onAdd, i, color }) {
   const out = p.track_stock !== false && (p.stock || 0) <= 0;
   return (
     <button onClick={() => onAdd(p)} data-testid={`product-tile-${p.id}`}
       className="group relative text-start bg-card border-e border-b p-0 min-h-[9rem] flex flex-col active:scale-[0.97] transition-transform hover:bg-accent/40 fade-up"
-      style={{ animationDelay: `${Math.min(i, 20) * 15}ms` }}>
+      style={{ animationDelay: `${Math.min(i, 20) * 15}ms`, borderTop: color ? `3px solid ${color}` : undefined }}>
       <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
         {p.image ? <img src={p.image} alt={p.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
           : <div className="w-full h-full grid place-items-center text-muted-foreground"><ImageOff className="w-6 h-6" /></div>}
@@ -68,12 +68,12 @@ export default function ProductGrid({ products, categories, currency, hideOut, o
       <div className="flex gap-1 px-3 py-2 border-b overflow-x-auto">
         {[{ id: "all", name: t("all") }, ...categories].map((c) => (
           <button key={c.id} onClick={() => setCat(c.id)} data-testid={`category-tab-${c.id}`}
-            className={`px-4 h-9 text-sm whitespace-nowrap rounded-md transition-colors ${cat === c.id ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent"}`}>{c.name}</button>
+            className={`px-4 h-9 text-sm whitespace-nowrap rounded-md transition-colors ${cat === c.id ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent"}`} style={c.color && cat !== c.id ? { boxShadow: `inset 3px 0 0 ${c.color}` } : undefined}>{c.name}</button>
         ))}
       </div>
       <div className="flex-1 overflow-y-auto">
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 border-s border-t" data-testid="product-grid">
-          {list.slice(0, limit).map((p, i) => <Tile key={p.id} p={p} i={i} currency={currency} onAdd={onAdd} />)}
+          {list.slice(0, limit).map((p, i) => <Tile key={p.id} p={p} i={i} currency={currency} onAdd={onAdd} color={categories.find((c) => c.id === p.category_id)?.color} />)}
         </div>
         {list.length === 0 && <div className="p-10 text-center text-muted-foreground" data-testid="product-grid-empty">No products match</div>}
         {limit < list.length && <div ref={sentinel} className="h-10" />}

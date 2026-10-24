@@ -12,10 +12,10 @@ import { api, errMsg } from "@/lib/api";
 import { toMinor } from "@/lib/money";
 import { PageHeader, DataTable, Field, useFetch, Pill } from "@/components/common";
 
-const REASONS = ["opening", "breakage", "loss", "sample", "stocktake", "other"];
+const REASONS = ["production", "opening", "damaged", "missing", "expired", "sample", "other"];
 
-function Adjust({ row, outletId, currency, onDone, onClose }) {
-  const [f, setF] = useState({ qty: "", reason: "breakage", cost: "", note: "" });
+export function Adjust({ row, outletId, currency, onDone, onClose }) {
+  const [f, setF] = useState({ qty: "", reason: "production", cost: "", note: "" });
   if (!row) return null;
   const save = async () => {
     try {
@@ -82,7 +82,7 @@ function Receive({ outletId, products, currency, onDone }) {
   );
 }
 
-export default function Inventory() {
+export default function Inventory({ view = "levels" }) {
   const { business } = useAuth();
   const { t } = useI18n();
   const c = business.currency;
@@ -102,26 +102,19 @@ export default function Inventory() {
   const lcols = [
     { key: "created_at", label: "Time", date: true }, { key: "product_name", label: "Product" }, { key: "ref_type", label: "Movement" },
     { key: "qty", label: "Qty", num: true, render: (r) => <span className={r.qty < 0 ? "text-destructive" : "text-success"}>{r.qty > 0 ? `+${r.qty}` : r.qty}</span> },
-    { key: "balance", label: "Balance", num: true }, { key: "unit_cost", label: "Unit cost", money: true },
+    { key: "balance", label: "Balance", num: true }, { key: "unit_cost", label: "Unit cost", money: true }, { key: "note", label: "Document", render: (r) => r.note || r.ref_id?.slice(0, 12) },
   ];
   return (
     <div>
-      <PageHeader title={t("inventory")} sub="Stock only moves through the ledger. Every row ties back to the sale, purchase, return or adjustment behind it.">
+      <div className="flex justify-end mb-4">
         <Select value={outletId || ""} onValueChange={setOid}>
-          <SelectTrigger className="w-48" data-testid="inventory-outlet-select"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-56" data-testid="inventory-outlet-select"><SelectValue /></SelectTrigger>
           <SelectContent>{(outlets || []).map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}</SelectContent>
         </Select>
-      </PageHeader>
-      <Tabs defaultValue="levels">
-        <TabsList className="mb-4">
-          <TabsTrigger value="levels" data-testid="inv-tab-levels">Stock levels</TabsTrigger>
-          <TabsTrigger value="ledger" data-testid="inv-tab-ledger">Stock ledger</TabsTrigger>
-          <TabsTrigger value="receive" data-testid="inv-tab-receive">Receive purchase</TabsTrigger>
-        </TabsList>
-        <TabsContent value="levels"><DataTable columns={cols} rows={rows} currency={c} testid="stock-table" onRow={(r) => r.track_stock && setAdj(r)} /></TabsContent>
-        <TabsContent value="ledger"><DataTable columns={lcols} rows={ledger || []} currency={c} testid="ledger-table" /></TabsContent>
-        <TabsContent value="receive"><Receive outletId={outletId} products={stock || []} currency={c} onDone={done} /></TabsContent>
-      </Tabs>
+      </div>
+      {view === "levels" ? <DataTable columns={cols} rows={rows} currency={c} testid="stock-table" onRow={(r) => r.track_stock && setAdj(r)} />
+        : <DataTable columns={lcols} rows={ledger || []} currency={c} testid="ledger-table" />}
+      {view === "levels" && <p className="text-xs text-muted-foreground mt-2">Click a product to record production, damage, loss or expiry. Values in amber are at or below their low-stock minimum.</p>}
       <Adjust row={adj} outletId={outletId} currency={c} onDone={done} onClose={() => setAdj(null)} />
     </div>
   );

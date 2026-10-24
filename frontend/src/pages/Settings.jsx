@@ -17,7 +17,7 @@ const Toggle = ({ label, checked, onChange, testid, hint }) => (
   <label className="flex items-start gap-3 text-sm py-2"><Switch checked={!!checked} onCheckedChange={onChange} data-testid={testid} /><span>{label}{hint && <span className="block text-xs text-muted-foreground">{hint}</span>}</span></label>
 );
 
-function BusinessTab() {
+export function BusinessTab() {
   const { business, user, setBusiness } = useAuth();
   const c = business.currency;
   const [f, setF] = useState(null);
@@ -71,7 +71,7 @@ function BusinessTab() {
   );
 }
 
-function OutletsTab() {
+export function OutletsTab() {
   const { data, reload } = useFetch("/outlets");
   const [n, setN] = useState({ name: "", code: "" });
   const upd = async (o, patch) => { try { await api.put(`/outlets/${o.id}`, patch); reload(); } catch (e) { toast.error(errMsg(e)); } };
@@ -83,6 +83,7 @@ function OutletsTab() {
         <Button disabled={!n.name || !n.code} onClick={async () => { try { await api.post("/outlets", { ...n, allow_negative_stock: false, hide_out_of_stock: false }); setN({ name: "", code: "" }); reload(); } catch (e) { toast.error(errMsg(e)); } }} data-testid="add-outlet-btn"><Plus className="w-4 h-4" /></Button>
       </div>
       <DataTable columns={[{ key: "name", label: "Branch" }, { key: "code", label: "Receipt prefix" },
+        { key: "type", label: "Type", render: (o) => <select className="h-8 rounded border bg-background px-2 text-sm" value={o.type || "shop"} onChange={(e) => upd(o, { type: e.target.value })} data-testid={`outlet-type-${o.code}`}><option value="shop">Retail shop</option><option value="factory">Manufacturing unit</option><option value="restaurant">Restaurant</option></select> },
         { key: "neg", label: "Sell beyond stock", render: (o) => <Switch checked={!!o.allow_negative_stock} onCheckedChange={(v) => upd(o, { allow_negative_stock: v })} data-testid={`outlet-negative-${o.code}`} /> },
         { key: "hide", label: "Hide out of stock", render: (o) => <Switch checked={!!o.hide_out_of_stock} onCheckedChange={(v) => upd(o, { hide_out_of_stock: v })} data-testid={`outlet-hide-${o.code}`} /> },
         { key: "sh", label: "Shifts on", render: (o) => <Switch checked={o.shifts_enabled !== false} onCheckedChange={(v) => upd(o, { shifts_enabled: v })} data-testid={`outlet-shifts-${o.code}`} /> }]} rows={data || []} testid="outlets-table" />
@@ -90,12 +91,13 @@ function OutletsTab() {
   );
 }
 
-function StaffTab() {
+export function StaffTab() {
   const { data, reload } = useFetch("/staff");
   const { data: outlets } = useFetch("/outlets");
+  const { data: roles } = useFetch("/roles");
   const [edit, setEdit] = useState(null);
   const save = async () => {
-    const body = { ...edit, discount_limit_bps: toBps(edit.limit), outlet_id: edit.outlet_id === "any" ? null : edit.outlet_id };
+    const body = { ...edit, discount_limit_bps: toBps(edit.limit), outlet_id: edit.outlet_id === "any" ? null : edit.outlet_id, role_id: edit.role_id || null };
     try { edit.id ? await api.put(`/staff/${edit.id}`, body) : await api.post("/staff", body); toast.success("Staff saved"); setEdit(null); reload(); }
     catch (e) { toast.error(errMsg(e)); }
   };
@@ -129,6 +131,7 @@ function StaffTab() {
                 </Select>
               </Field>
               <Field label="Discount limit %"><Input value={edit.limit} onChange={(e) => setEdit({ ...edit, limit: e.target.value })} data-testid="staff-limit-input" /></Field>
+              <Field label="Custom role"><select className="w-full h-9 rounded-md border bg-background px-2 text-sm" value={edit.role_id || ""} onChange={(e) => setEdit({ ...edit, role_id: e.target.value })} data-testid="staff-customrole-select"><option value="">—</option>{(roles || []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></Field>
               {edit.id && <label className="flex items-center gap-2 text-sm pt-6"><Switch checked={edit.active !== false} onCheckedChange={(v) => setEdit({ ...edit, active: v })} data-testid="staff-active-switch" />Active</label>}
               <Button className="col-span-2" onClick={save} disabled={!edit.name || !edit.email} data-testid="staff-save-btn">Save</Button>
             </div>
@@ -139,7 +142,7 @@ function StaffTab() {
   );
 }
 
-function TablesTab() {
+export function TablesTab() {
   const { data, reload } = useFetch("/tables");
   const { data: outlets } = useFetch("/outlets");
   const [n, setN] = useState({ name: "", zone: "Indoor", seats: "4", outlet_id: "" });

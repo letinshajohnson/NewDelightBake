@@ -18,7 +18,7 @@ function Detail({ id, onClose, currency, levels, canEdit, onSaved }) {
   const [pts, setPts] = useState("");
   if (!id) return null;
   const c = data?.customer;
-  const form = f || (c && { name: c.name, phone: c.phone || "", email: c.email || "", level: c.level || "none", credit_limit: toMajorStr(c.credit_limit || 0, currency) });
+  const form = f || (c && { name: c.name, phone: c.phone || "", email: c.email || "", level: c.level || "none", price_level: c.price_level || "retail", credit_limit: toMajorStr(c.credit_limit || 0, currency) });
   const save = async () => {
     try {
       await api.put(`/customers/${id}`, { ...form, level: form.level === "none" ? null : form.level, credit_limit: toMinor(form.credit_limit, currency) });
@@ -50,6 +50,12 @@ function Detail({ id, onClose, currency, levels, canEdit, onSaved }) {
                   </Select>
                 </Field>
                 <Field label="Credit limit"><Input value={form.credit_limit} onChange={(e) => setF({ ...form, credit_limit: e.target.value })} data-testid="cust-credit-input" /></Field>
+                <Field label="Customer type (price level)">
+                  <Select value={form.price_level} onValueChange={(v) => setF({ ...form, price_level: v })}>
+                    <SelectTrigger data-testid="cust-pricelevel-select"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="retail">Retail</SelectItem><SelectItem value="wholesale">Wholesale</SelectItem></SelectContent>
+                  </Select>
+                </Field>
                 <Button className="col-span-2" onClick={save} data-testid="cust-save-btn">Save</Button>
               </div>
             )}
@@ -89,7 +95,7 @@ export default function Customers() {
         <Input placeholder="Phone" value={n.phone} onChange={(e) => setN({ ...n, phone: e.target.value })} className="w-40" data-testid="new-customer-phone" />
         <Button disabled={!n.name} onClick={add} data-testid="add-customer-btn"><Plus className="w-4 h-4 me-1" />Add</Button>
       </div>
-      <DataTable columns={[{ key: "name", label: "Name" }, { key: "phone", label: "Phone" }, { key: "level", label: "Level", render: (r) => r.level ? <Pill tone="info">{r.level}</Pill> : "—" },
+      <DataTable columns={[{ key: "name", label: "Name" }, { key: "phone", label: "Phone" }, { key: "price_level", label: "Type", render: (r) => <Pill tone={r.price_level === "wholesale" ? "warn" : "muted"}>{r.price_level || "retail"}</Pill> }, { key: "level", label: "Level", render: (r) => r.level ? <Pill tone="info">{r.level}</Pill> : "—" },
         { key: "store_credit", label: "Store credit", money: true }, { key: "credit_limit", label: "Credit limit", money: true }]} rows={rows} currency={c} testid="customers-table" onRow={(r) => setSel(r.id)} />
       <Detail id={sel} onClose={() => setSel(null)} currency={c} levels={business.levels || []} canEdit={isManager(user)} onSaved={reload} />
     </div>

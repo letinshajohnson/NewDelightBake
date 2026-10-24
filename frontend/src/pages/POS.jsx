@@ -26,6 +26,7 @@ import TablesView from "@/components/pos/TablesView";
 import { OpenShiftDialog, CloseShiftDialog, CashDialog } from "@/components/pos/ShiftDialogs";
 
 const EMPTY = { lines: [], customer: null, voucher: null, order_discount: null, points: 0, order: null };
+const lvl = (p, cu) => (cu?.price_level && p.level_prices?.[cu.price_level]) || p.price;
 
 function PickDialog({ pick, onClose }) {
   if (!pick) return null;
@@ -134,7 +135,7 @@ export default function POS() {
       const qty = idx >= 0 ? c.lines[idx].qty + 1 : 1;
       if (!stockOk(p, qty)) return c;
       if (idx >= 0) return { ...c, lines: c.lines.map((l, i) => (i === idx ? { ...l, qty } : l)) };
-      return { ...c, lines: [...c.lines, { key: uuid(), product_id: p.id, name: p.name, unit_price: p.price, qty: 1, category_id: p.category_id,
+      return { ...c, lines: [...c.lines, { key: uuid(), product_id: p.id, name: p.name, unit_price: lvl(p, c.customer), qty: 1, category_id: p.category_id,
         tax_bps: p.tax_bps || 0, image: p.image, station: p.station, track_stock: p.track_stock !== false, sent_qty: 0 }] };
     });
   };
@@ -370,7 +371,7 @@ export default function POS() {
       <CashDialog open={dlg === "cash"} onOpenChange={(o) => !o && setDlg(null)} onSave={saveCash} currency={currency} />
       <PaymentDialog open={dlg === "pay"} onOpenChange={(o) => !o && setDlg(null)} total={totals.total} currency={currency} methods={biz.payment_methods || []} customer={cart.customer} onPay={completeSale} busy={busy} />
       <CustomerDialog open={dlg === "customer"} onOpenChange={(o) => !o && setDlg(null)} customers={data.customers} selected={cart.customer} currency={currency}
-        onSelect={(c) => setCart((x) => ({ ...x, customer: c, points: 0 }))}
+        onSelect={(c) => setCart((x) => ({ ...x, customer: c, points: 0, lines: x.lines.map((l) => ({ ...l, unit_price: lvl(data.products.find((p) => p.id === l.product_id) || { price: l.unit_price }, c) })) }))}
         onSaved={(c) => update((d) => ({ ...d, customers: d.customers.some((x) => x.id === c.id) ? d.customers.map((x) => (x.id === c.id ? { ...x, ...c } : x)) : [...d.customers, c] }))} />
       <DiscountDialog open={dlg === "discount"} onOpenChange={(o) => !o && setDlg(null)} presets={data.rules.filter((r) => r.kind === "cashier" && r.active !== false)}
         subtotal={totals.subtotal} currency={currency} user={user} cart={cart} setCart={setCart} outlet={outlet} vouchers={data.vouchers} loyalty={biz.loyalty} />

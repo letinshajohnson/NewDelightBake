@@ -1,14 +1,16 @@
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { LayoutDashboard, Package, Boxes, BadgePercent, Users, Receipt, Wallet, BarChart3, Settings, MonitorSmartphone, ChefHat, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, BadgePercent, Users, Receipt, Wallet, BarChart3, Settings, MonitorSmartphone, ChefHat, LogOut, Menu, X, Truck, Contact, Landmark, Scale, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth, isManager } from "@/context/AuthContext";
 import { useI18n } from "@/lib/i18n";
 import { ThemeToggle, LangSelect, Pill } from "@/components/common";
 
 const NAV = [
-  ["dashboard", LayoutDashboard, true], ["products", Package, true], ["inventory", Boxes, true], ["promotions", BadgePercent, true],
-  ["customers", Users, false], ["sales", Receipt, false], ["shifts", Wallet, false], ["reports", BarChart3, true], ["settings", Settings, true],
+  ["dashboard", "Dashboard", LayoutDashboard, true], ["catalog", "Catalog", Package, true], ["purchasing", "Purchasing", Truck, true],
+  ["sales", "Sales", Receipt, false], ["crm", "CRM", Contact, false], ["finance", "Finance", Landmark, true], ["payables", "Payables & receivables", Scale, true],
+  ["stock", "Stock manager", Boxes, true], ["promotions", "Promotions", BadgePercent, true], ["shifts", "Shifts", Wallet, false],
+  ["reports", "Reports", BarChart3, true], ["settings", "Settings", Settings, true], ["users", "Users", UserCog, true],
 ];
 
 function SideNav({ onNav }) {
@@ -24,10 +26,10 @@ function SideNav({ onNav }) {
         {sub && <div className="mt-2"><Pill tone={sub.status === "active" ? "ok" : "warn"} testid="subscription-status">{sub.plan} · {sub.status}</Pill></div>}
       </div>
       <nav className="flex-1 py-4 overflow-y-auto">
-        {NAV.filter(([, , m]) => !m || isManager(user)).map(([k, Icon]) => (
+        {NAV.filter(([, , , m]) => !m || isManager(user)).map(([k, label, Icon]) => (
           <NavLink key={k} to={`/app/${k}`} onClick={onNav} data-testid={`nav-${k}`}
             className={({ isActive }) => `flex items-center gap-3 px-6 py-2.5 text-sm border-s-2 transition-colors ${isActive ? "border-primary bg-accent text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50"}`}>
-            <Icon className="w-4 h-4" />{t(k)}
+            <Icon className="w-4 h-4" />{["dashboard", "sales", "reports", "settings", "promotions"].includes(k) ? t(k) : label}
           </NavLink>
         ))}
       </nav>

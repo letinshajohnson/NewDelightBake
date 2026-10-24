@@ -10,11 +10,16 @@ import { fmt } from "@/lib/money";
 import { PageHeader, DataTable, useFetch, ExportBtn, exportCSV } from "@/components/common";
 
 const GROUPS = [
-  ["Sales", [["summary", "Sales summary"], ["transactions", "Sales by transaction"], ["products", "Sales by product"], ["trend", "Sales trend"], ["payments", "Payments received"], ["cashiers", "Cashier performance"], ["returns", "Returns"]]],
-  ["Finance", [["profit_loss", "Profit & loss"], ["profit", "Profit by product"], ["cash", "Cash in & out"], ["shifts", "Shift reports"]]],
-  ["Products", [["stock_movement", "Stock movement"], ["loyalty", "Loyalty balances"]]],
-  ["Restaurant", [["restaurant", "Sales by table"]]],
-  ["Branches", [["branches", "Branch comparison"]]],
+  ["Sales", [["products", "Sales by product"], ["transactions", "Sales by transaction"], ["returns_by_product", "Sales returns by product"], ["returns", "Sales returns by transaction"],
+    ["monthly_trend", "Monthly product trend"], ["daily_trend", "Daily product trend"], ["trend", "Sales trend (chart)"], ["summary", "Sales summary"], ["cashiers", "Cashier performance"]]],
+  ["Purchases", [["purchases_by_product", "Purchases by product"], ["purchases_by_transaction", "Purchases by transaction"], ["purchase_returns_by_product", "Purchase returns by product"],
+    ["purchase_returns_by_transaction", "Purchase returns by transaction"]]],
+  ["Finance", [["cash_in", "Cash in"], ["cash_out", "Cash out"], ["purchase_payments", "Purchase payments"], ["sale_payments", "Sale payments"],
+    ["purchase_return_refunds", "Purchase return refunds"], ["sale_return_refunds", "Sale return refunds"], ["payments", "Payments by method"], ["profit_loss", "Profit & loss"], ["profit", "Profit by product"]]],
+  ["Products", [["stock_movement", "Stock movement"], ["sales_by_category", "Sales by category"], ["sales_by_brand", "Sales by brand"], ["stock_alerts", "Stock alerts"],
+    ["best_sellers", "Best sellers"], ["stocktakes", "Stock takes"], ["product_stock", "Product stock"], ["transfers", "Stock transfers"], ["loyalty", "Loyalty balances"]]],
+  ["Restaurant", [["restaurant", "Sales per table"], ["waiters", "Sales per waiter"], ["busy_hours", "Busiest hours"], ["kitchen_time", "Kitchen time per item"]]],
+  ["Store / outlet", [["outlet_pl", "Store profit & loss"], ["branches", "Branch comparison"], ["shifts", "Shift register"]]],
 ];
 
 export default function Reports() {

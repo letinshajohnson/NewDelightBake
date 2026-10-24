@@ -201,7 +201,7 @@ async def process_sale(user, p, offline):
         pr = prods.get(l["product_id"])
         if not pr:
             raise HTTPException(400, "Unknown product in sale")
-        price = int(l["unit_price"]) if (b.get("allow_price_edit") or offline) else pr["price"]
+        price = int(l["unit_price"]) if (b.get("allow_price_edit") or offline) else ((pr.get("level_prices") or {}).get((customer or {}).get("price_level") or "") or pr["price"])
         if int(l["qty"]) <= 0 or price < 0:
             raise HTTPException(400, "Invalid quantity or price")
         lines.append({"product_id": pr["id"], "name": pr["name"], "category_id": pr.get("category_id"), "qty": int(l["qty"]),
@@ -236,6 +236,7 @@ async def process_sale(user, p, offline):
         if rec + due > customer["credit_limit"]:
             raise HTTPException(400, "Credit limit exceeded for this customer")
     sale_id = uid("sal_")
+    waiter = (await db.open_orders.find_one({"id": p["order_id"]}) or {}).get("created_by") if p.get("order_id") else None
     strict = not outlet.get("allow_negative_stock") and not offline
     moved = []
     for l in t["lines"]:
@@ -260,7 +261,7 @@ async def process_sale(user, p, offline):
     sale = {"id": sale_id, "business_id": bid, "client_id": p["client_id"], "receipt_no": p["receipt_no"], "outlet_id": outlet["id"],
             "shift_id": p.get("shift_id"), "cashier_id": user["id"], "cashier_name": user["name"],
             "customer_id": customer["id"] if customer else None, "customer_name": customer["name"] if customer else None,
-            "order_id": p.get("order_id"), "table_id": p.get("table_id"), "channel": p.get("channel", "retail"),
+            "order_id": p.get("order_id"), "table_id": p.get("table_id"), "waiter": waiter, "channel": p.get("channel", "retail"),
             "lines": t["lines"], "gross": t["gross"], "line_discount": t["line_discount"], "subtotal": t["subtotal"],
             "order_discount": t["order_discount"], "applied": t["applied"], "tax": t["tax"], "service": t["service"],
             "rounding": t["rounding"], "total": t["total"], "cogs": sum(l["cogs"] for l in t["lines"]),
