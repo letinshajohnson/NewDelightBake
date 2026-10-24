@@ -76,7 +76,7 @@ agenthub/agents/youtube/db
 # Build caches
 .cache/
 
-memory/test_credentials.md
+#memory/test_credentials.md
 
 # Mobile development
 android-sdk/
@@ -86,3 +86,4 @@ android-sdk/
 frontend/node_modules/.cache/default-development/3.pack
 frontend/node_modules/.cache/default-development/11.pack
 frontend/node_modules/.cache/default-development/14.pack
+frontend/node_modules/.cache/default-development/0.pack
