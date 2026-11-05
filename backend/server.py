@@ -1,5 +1,6 @@
 from core import db, uid, now_iso, hash_pw, verify_pw, set_auth_cookies, public_user, get_user, require, get_business, MANAGERS, CURRENCIES, make_token
 import os
+import re
 import httpx
 import jwt
 from datetime import datetime, timezone, timedelta
@@ -10,8 +11,10 @@ import sales
 import reports
 import backoffice
 import production
+import extras
+from extras import audit, classify
 
-app = FastAPI(title="POSHub")
+app = FastAPI(title="New Delight POSHub")
 api = APIRouter(prefix="/api")
 
 
@@ -55,11 +58,19 @@ async def login(request: Request, response: Response, data: dict = Body(...)):
     if att and att.get("count", 0) >= 5 and att.get("locked_until", "") > now_iso():
         raise HTTPException(429, "Too many failed attempts. Try again in 15 minutes.")
     user = await db.users.find_one({"email": email, "active": {"$ne": False}}, {"_id": 0})
+    ip = ident.split(":")[0]
     if not user or not user.get("password_hash") or not verify_pw(data.get("password") or "", user["password_hash"]):
         lock = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
         await db.login_attempts.update_one({"identifier": ident}, {"$inc": {"count": 1}, "$set": {"locked_until": lock}}, upsert=True)
+        await audit(user, "auth.login_failed", f"Failed sign-in for {email}", "danger", ip=ip)
         raise HTTPException(401, "Invalid email or password")
+    if data.get("shop") and user["role"] != "owner":
+        o = await db.outlets.find_one({"business_id": user["business_id"], "code": {"$regex": f"^{re.escape(data['shop'])}$", "$options": "i"}})
+        if not o or (user.get("outlet_id") and user["outlet_id"] != o["id"]):
+            await audit(user, "auth.wrong_shop", f"Tried to sign in at shop '{data['shop']}' which is not theirs", "danger", ip=ip)
+            raise HTTPException(403, "This account does not belong to this shop")
     await db.login_attempts.delete_many({"identifier": ident})
+    await audit(user, "auth.login", f"Signed in{' at shop ' + data['shop'] if data.get('shop') else ''}", ip=ip)
     set_auth_cookies(response, user["id"])
     return public_user(user)
 
@@ -142,7 +153,8 @@ async def supervisor(data: dict = Body(...), user=Depends(get_user)):
 
 # ---------------- Business settings ----------------
 BUSINESS_FIELDS = ("name", "currency", "tz_offset_min", "tax_inclusive", "service_bps", "rounding_unit", "restaurant_mode",
-                   "allow_price_edit", "loyalty", "payment_methods", "receipt_footer", "levels", "prefixes", "notifications", "realtime", "receipt", "price_levels")
+                   "allow_price_edit", "loyalty", "payment_methods", "receipt_footer", "levels", "prefixes", "notifications", "realtime", "receipt", "price_levels",
+                   "logo_file", "support_phone", "support_email", "gst_applicable", "gstin", "fssai", "address")
 
 
 @api.put("/business")
@@ -178,7 +190,7 @@ def crud(name, coll, prefix, write_roles=MANAGERS, sort="name"):
         return r
 
     @api.delete(f"/{name}/{{item_id}}", name=f"delete_{name}")
-    async def _delete(item_id: str, user=Depends(require(*write_roles))):
+    async def _delete(item_id: str, user=Depends(require(*[r for r in write_roles if r in MANAGERS]))):
         await db[coll].update_one({"id": item_id, "business_id": user["business_id"]}, {"$set": {"archived": True}})
         return {"ok": True}
 
@@ -228,6 +240,20 @@ async def create_product(data: dict = Body(...), user=Depends(require(*MANAGERS)
     return d
 
 
+@api.post("/products/from-pos")
+async def products_from_pos(data: dict = Body(...), user=Depends(require("owner", "manager", "cashier"))):
+    out = []
+    for it in data.get("items", [])[:50]:
+        name = (it.get("name") or "").strip()[:80]
+        if not name or await db.products.find_one({"business_id": user["business_id"], "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}, "archived": {"$ne": True}}):
+            continue
+        d = {"id": uid("prd_"), "business_id": user["business_id"], "name": name, "price": max(int(it.get("price") or 0), 0), "cost": 0, "tax_bps": 0,
+             "track_stock": True, "low_stock": 0, "added_from_pos": True, "added_by": user["name"], "created_at": now_iso()}
+        await db.products.insert_one(d)
+        out.append(name)
+    return {"added": out}
+
+
 @api.put("/products/{pid}")
 async def update_product(pid: str, data: dict = Body(...), user=Depends(require(*MANAGERS))):
     r = await db.products.find_one_and_update({"id": pid, "business_id": user["business_id"]}, {"$set": _product_data(data)},
@@ -255,20 +281,24 @@ async def _pin_taken(bid, pin, exclude=None):
     return u is not None and u["id"] != exclude
 
 
+STAFF_EXTRA = ("phone", "salary", "salary_period", "id_proof_file", "health_card_file", "joined_on")
+
+
 @api.post("/staff")
 async def create_staff(data: dict = Body(...), user=Depends(require(*MANAGERS))):
-    email = (data.get("email") or "").strip().lower()
+    role = data.get("role", "cashier")
+    email = (data.get("email") or "").strip().lower() or (f"{uid('helper_')}@no-login.local" if role == "helper" else "")
     if not email or not data.get("name"):
         raise HTTPException(400, "Name and email are required")
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "Email already in use")
-    role = data.get("role", "cashier")
-    if role not in ("manager", "cashier", "waiter", "kitchen") or (user["role"] == "manager" and role == "manager"):
+    if role not in ("manager", "cashier", "waiter", "kitchen", "helper") or (user["role"] == "manager" and role == "manager"):
         raise HTTPException(403, "You cannot create this role")
     doc = {"id": uid("usr_"), "business_id": user["business_id"], "email": email, "name": data["name"], "role": role,
            "outlet_id": data.get("outlet_id") or None, "discount_limit_bps": int(data.get("discount_limit_bps") or 0), "role_id": data.get("role_id"),
-           "active": True, "created_at": now_iso()}
-    if data.get("password"):
+           "active": True, "created_at": now_iso(), **{k: data.get(k) for k in STAFF_EXTRA}}
+    doc["salary"] = int(doc.get("salary") or 0)
+    if data.get("password") and role != "helper":
         doc["password_hash"] = hash_pw(data["password"])
     if data.get("pin"):
         if await _pin_taken(user["business_id"], str(data["pin"])):
@@ -285,7 +315,11 @@ async def update_staff(sid: str, data: dict = Body(...), user=Depends(require(*M
         raise HTTPException(404, "Staff not found")
     if target["role"] == "owner" and user["role"] != "owner":
         raise HTTPException(403, "Only the owner can edit the owner")
-    upd = {k: data[k] for k in ("name", "role", "outlet_id", "discount_limit_bps", "active", "role_id") if k in data}
+    upd = {k: data[k] for k in ("name", "role", "outlet_id", "discount_limit_bps", "active", "role_id", *STAFF_EXTRA) if k in data}
+    if "salary" in upd:
+        upd["salary"] = int(upd["salary"] or 0)
+    if target["role"] in MANAGERS and target["id"] != user["id"] and user["role"] != "owner":
+        raise HTTPException(403, "Only the owner can change another manager")
     if "role" in upd and upd["role"] != target["role"] and (target["role"] == "owner" or upd["role"] == "owner"):
         raise HTTPException(403, "Owner role cannot be changed")
     if data.get("password"):
@@ -347,7 +381,28 @@ api.include_router(sales.router)
 api.include_router(reports.router)
 api.include_router(backoffice.router)
 api.include_router(production.router)
+api.include_router(extras.router)
 app.include_router(api)
+
+
+@app.middleware("http")
+async def audit_mw(request: Request, call_next):
+    resp = await call_next(request)
+    path = request.url.path
+    if request.method in ("POST", "PUT", "DELETE", "PATCH") and path.startswith("/api/") and not path.startswith(("/api/auth/login", "/api/auth/refresh", "/api/cron", "/api/auth/forgot", "/api/auth/reset")):
+        try:
+            tok = request.cookies.get("access_token") or request.headers.get("Authorization", "")[7:]
+            sub = jwt.decode(tok, os.environ["JWT_SECRET"], algorithms=["HS256"])["sub"] if tok else None
+            u = sub and await db.users.find_one({"id": sub}, {"_id": 0, "id": 1, "business_id": 1, "name": 1, "role": 1, "outlet_id": 1})
+            if u:
+                act = path[5:].split("/")
+                verb = {"POST": "created" if len(act) == 1 else act[-1], "PUT": "updated", "DELETE": "deleted", "PATCH": "updated"}[request.method]
+                ok = "" if resp.status_code < 400 else f" — refused ({resp.status_code})"
+                await audit(u, f"{act[0]}.{verb}", f"{request.method} {path[4:]}{ok}", classify(request.method, path, resp.status_code),
+                            outlet_id=request.query_params.get("outlet_id"), ip=(request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or None)
+        except Exception:
+            pass
+    return resp
 
 app.add_middleware(CORSMiddleware, allow_origins=[os.environ["FRONTEND_URL"]], allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
@@ -364,4 +419,10 @@ async def startup():
     await db.stock_ledger.create_index([("business_id", 1), ("created_at", -1)])
     await db.points_ledger.create_index([("business_id", 1), ("customer_id", 1)])
     await db.sync_ops.create_index([("business_id", 1), ("client_id", 1)], unique=True)
+    await db.audit.create_index([("business_id", 1), ("created_at", -1)])
+    await db.attendance.create_index([("business_id", 1), ("staff_id", 1), ("date", 1)], unique=True)
+    try:
+        extras.init_storage()
+    except Exception as e:
+        print(f"Storage init failed: {e}")
     await seed_all()

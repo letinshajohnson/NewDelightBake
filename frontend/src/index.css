@@ -98,4 +98,13 @@
     body * { visibility: hidden; }
     .print-area, .print-area * { visibility: visible; }
     .print-area { position: absolute; inset: 0 auto auto 0; width: 80mm; color: #000; background: #fff; }
+    .print-area.print-wide { width: 100%; padding: 0; }
+    .print-area .overflow-x-auto, .print-area .overflow-y-auto, .print-area .overflow-auto { overflow: visible !important; max-height: none !important; }
+    .print-area td, .print-area th { white-space: normal !important; color: #000 !important; padding: 4px 6px !important; }
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
 }
+.print-only { display: none; }
+.dark { color-scheme: dark; }
+.dark input[type="date"]::-webkit-calendar-picker-indicator, .dark input[type="month"]::-webkit-calendar-picker-indicator, .dark input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }

@@ -13,6 +13,8 @@ import Shifts from "@/pages/Shifts";
 import Section from "@/pages/Section";
 import POS from "@/pages/POS";
 import Kitchen from "@/pages/Kitchen";
+import PrintDoc from "@/pages/PrintDoc";
+import ResetPassword from "@/pages/ResetPassword";
 
 function AuthCallback() {
   const done = useRef(false);
@@ -47,6 +49,9 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/shop/:code" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/print/:kind/:id" element={<Guard><PrintDoc /></Guard>} />
       <Route path="/pos" element={<Guard allow={(u) => u.role !== "kitchen"}><POS /></Guard>} />
       <Route path="/kitchen" element={<Guard><Kitchen /></Guard>} />
       <Route path="/app" element={<Guard allow={staffPanel}><AppShell /></Guard>}>

@@ -202,10 +202,12 @@ async def process_sale(user, p, offline):
     prods = {x["id"]: x for x in await db.products.find({"business_id": bid, "id": {"$in": [l["product_id"] for l in p["lines"]]}}, {"_id": 0}).to_list(1000)}
     lines = []
     for l in p["lines"]:
+        if str(l["product_id"]).startswith("custom_") and (l.get("name") or "").strip():
+            prods[l["product_id"]] = {"id": l["product_id"], "name": l["name"].strip()[:80], "price": int(l["unit_price"]), "track_stock": False, "tax_bps": 0, "custom": True}
         pr = prods.get(l["product_id"])
         if not pr:
             raise HTTPException(400, "Unknown product in sale")
-        price = int(l["unit_price"]) if (b.get("allow_price_edit") or offline) else ((pr.get("level_prices") or {}).get((customer or {}).get("price_level") or "") or pr["price"])
+        price = int(l["unit_price"]) if (b.get("allow_price_edit") or offline or pr.get("custom")) else ((pr.get("level_prices") or {}).get((customer or {}).get("price_level") or "") or pr["price"])
         if int(l["qty"]) <= 0 or price < 0:
             raise HTTPException(400, "Invalid quantity or price")
         lines.append({"product_id": pr["id"], "name": pr["name"], "category_id": pr.get("category_id"), "qty": int(l["qty"]),

@@ -1,0 +1,9 @@
+crons:
+  - name: daily-summary
+    description: "Emails the daily sales, purchase, finance, attendance and audit report to owner and managers at 9:30pm IST"
+    cron: "30 21 * * *"
+    timezone: "Asia/Kolkata"
+    endpoint: "{{BASE_URL}}/api/cron/daily-summary"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

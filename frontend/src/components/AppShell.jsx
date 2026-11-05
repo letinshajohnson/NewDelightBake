@@ -1,6 +1,6 @@
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { LayoutDashboard, Package, Boxes, BadgePercent, Users, Receipt, Wallet, BarChart3, Settings, MonitorSmartphone, ChefHat, LogOut, Menu, X, Truck, Contact, Landmark, Scale, UserCog, ArrowDownUp } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, BadgePercent, Users, Receipt, Wallet, BarChart3, Settings, MonitorSmartphone, ChefHat, LogOut, Menu, X, Truck, Contact, Landmark, Scale, UserCog, ArrowDownUp, ClipboardList, CalendarCheck, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth, isManager } from "@/context/AuthContext";
 import { useI18n } from "@/lib/i18n";
@@ -8,9 +8,9 @@ import { ThemeToggle, LangSelect, Pill } from "@/components/common";
 
 const NAV = [
   ["dashboard", "Dashboard", LayoutDashboard, true], ["catalog", "Catalog", Package, true], ["production", "Production", ChefHat, true], ["purchasing", "Purchasing", Truck, true],
-  ["sales", "Sales", Receipt, false], ["crm", "CRM", Contact, false], ["finance", "Finance", Landmark, true], ["payables", "Payables & receivables", Scale, true],
-  ["stock", "Stock manager", Boxes, true], ["promotions", "Promotions", BadgePercent, true], ["shifts", "Shifts", Wallet, false],
-  ["reports", "Reports", BarChart3, true], ["data", "Import / export", ArrowDownUp, true], ["settings", "Settings", Settings, true], ["users", "Users", UserCog, true],
+  ["sales", "Sales", Receipt, false], ["orders", "Customer orders", ClipboardList, false], ["crm", "CRM", Contact, false], ["finance", "Finance", Landmark, true], ["payables", "Payables & receivables", Scale, true],
+  ["stock", "Stock manager", Boxes, true], ["promotions", "Promotions", BadgePercent, true], ["shifts", "Shifts", Wallet, false], ["hr", "Staff & attendance", CalendarCheck, true],
+  ["reports", "Reports", BarChart3, true], ["audit", "Audit log", ShieldAlert, true], ["data", "Import / export", ArrowDownUp, true], ["settings", "Settings", Settings, true], ["users", "Users", UserCog, true],
 ];
 
 function SideNav({ onNav }) {
@@ -21,7 +21,7 @@ function SideNav({ onNav }) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-6 py-6 border-b">
-        <div className="font-display text-2xl font-bold tracking-tight">POS<span className="text-primary">Hub</span></div>
+        <div className="font-display text-2xl font-bold tracking-tight">New Delight <span className="text-primary">POSHub</span></div>
         <div className="text-xs text-muted-foreground mt-1 truncate" data-testid="sidebar-business-name">{business?.name}</div>
         {sub && <div className="mt-2"><Pill tone={sub.status === "active" ? "ok" : "warn"} testid="subscription-status">{sub.plan} · {sub.status}</Pill></div>}
       </div>
@@ -60,7 +60,7 @@ export default function AppShell() {
       <main className="flex-1 min-w-0">
         <div className="lg:hidden flex items-center justify-between px-4 h-14 border-b bg-card sticky top-0 z-40">
           <Button variant="ghost" size="icon" onClick={() => setOpen(!open)} data-testid="mobile-menu-btn">{open ? <X /> : <Menu />}</Button>
-          <div className="font-display font-bold">POS<span className="text-primary">Hub</span></div>
+          <div className="font-display font-bold">New Delight <span className="text-primary">POSHub</span></div>
           <ThemeToggle />
         </div>
         <div className="px-4 sm:px-8 lg:px-12 py-8 max-w-[1500px]"><Outlet /></div>

@@ -141,7 +141,8 @@ async def import_rows(kind: str, data: dict = Body(...), user=Depends(require(*M
             for r in items:
                 gst = int(float(r.get("gst") or 0) * 100)
                 price = money(r.get("mrp")) or money(r.get("rate")) * (10000 + gst) // 10000
-                p = await _find_or_make(bid, "products", r["item"], {"category_id": cat["id"], "brand_id": brand["id"], "hsn": r.get("hsn"), "price": price,
+                p = await _match_product(bid, r) or await _find_or_make(bid, "products", r["item"], {"category_id": cat["id"], "brand_id": brand["id"], "hsn": r.get("hsn"), "price": price,
+                                                                     "sku": r.get("sku") or None, "barcode": r.get("barcode") or None,
                                                                      "cost": money(r.get("rate")), "tax_bps": gst, "track_stock": True, "low_stock": 5})
                 q = int(float(r.get("qty") or 0))
                 await move_stock(bid, outlet, p["id"], q, "purchase", inv, cost=money(r.get("rate")), note=f"{sname} {inv}")
@@ -153,9 +154,44 @@ async def import_rows(kind: str, data: dict = Body(...), user=Depends(require(*M
                                                  "paid": 0, "payments": [], "due_date": items[0].get("due_date") or None, "status": "received", "created_by": user["name"],
                                                  "created_at": f"{items[0]['date']}T06:30:00+00:00" if items[0].get("date") else now_iso()})
             n += 1
+    elif kind == "stock":
+        outlet = data.get("outlet_id")
+        if not outlet or not await db.outlets.find_one({"id": outlet, "business_id": bid}):
+            raise HTTPException(400, "Choose the outlet for this stock")
+        for i, r in enumerate(rows, start=2):
+            p = await _match_product(bid, {**r, "item": r.get("product")})
+            if not p:
+                raise HTTPException(400, f"Row {i}: product '{r.get('product')}' not found")
+            q = int(float(r.get("qty") or 0))
+            if q:
+                await move_stock(bid, outlet, p["id"], q, "adjustment", uid("imp_"), cost=money(r.get("cost")) or None, note="Opening stock import")
+                n += 1
+    elif kind == "recipes":
+        found = {}
+        for i, r in enumerate(rows, start=2):
+            p = await _match_product(bid, {"item": r.get("product")})
+            m = await _match_product(bid, {"item": r.get("raw_material")})
+            if not p or not m:
+                raise HTTPException(400, f"Row {i}: '{r.get('product') if not p else r.get('raw_material')}' not found in products")
+            e = found.setdefault(p["id"], {"recipe": [], "batch_yield": int(float(r.get("pieces_per_batch") or 1))})
+            e["recipe"].append({"product_id": m["id"], "name": m["name"], "qty": int(float(r.get("qty_per_batch") or 0))})
+        for pid, e in found.items():
+            await db.products.update_one({"id": pid}, {"$set": {**e, "made_in_house": True}})
+            n += 1
     else:
         raise HTTPException(404, "Unknown import type")
     return {"ok": True, "imported": n}
+
+
+async def _match_product(bid: str, r: dict) -> dict | None:
+    for k in ("barcode", "sku"):
+        if r.get(k):
+            p = await db.products.find_one({"business_id": bid, k: r[k], "archived": {"$ne": True}}, {"_id": 0})
+            if p:
+                return p
+    if r.get("item"):
+        return await db.products.find_one({"business_id": bid, "archived": {"$ne": True}, "name": {"$regex": f"^{re.escape(r['item'].strip())}$", "$options": "i"}}, {"_id": 0})
+    return None
 
 
 SCAN_PROMPT = """You read Indian GST purchase invoices (tax invoices) from photos. Reply with JSON only, no prose:

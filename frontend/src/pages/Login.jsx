@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { WifiOff, Calculator, ChefHat, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,16 +34,26 @@ export default function Login() {
   const { user, reload } = useAuth();
   const { t } = useI18n();
   const nav = useNavigate();
+  const { code } = useParams();
+  const sub = window.location.hostname.match(/^([a-z0-9-]+)\.newdelightfoods\.com$/i)?.[1];
+  const shop = code || (sub && sub !== "www" ? sub : "");
+  const [shopName, setShopName] = useState("");
+  useEffect(() => { if (shop) { api.get(`/public/shop/${shop}`).then(({ data }) => setShopName(data.name)).catch(() => setShopName("")); } }, [shop]);
   const [f, setF] = useState({ email: "", password: "", name: "", business_name: "", currency: "INR" });
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
   if (user) return <Navigate to={homeFor(user)} replace />;
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const sendReset = async () => {
+    try { await api.post("/auth/forgot", { email: f.email }); toast.success("If this is an owner or manager account, a reset link is on its way to that email."); setForgot(false); }
+    catch (err) { toast.error(errMsg(err)); }
+  };
 
   const submit = (path) => async (e) => {
     e.preventDefault();
     setBusy(true);
     try {
-      await api.post(path, f);
+      await api.post(path, { ...f, shop: shop || undefined });
       const d = await reload();
       nav(homeFor(d?.user));
     } catch (err) { toast.error(errMsg(err)); }
@@ -55,7 +65,7 @@ export default function Login() {
       <div className="relative hidden lg:flex flex-col justify-between p-12 overflow-hidden bg-black text-white">
         <img src="/img/hero.jpg" alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
         <div className="absolute inset-0 grain" />
-        <div className="relative font-display text-3xl font-bold">POS<span className="text-[#0A84FF]">Hub</span></div>
+        <div className="relative font-display text-3xl font-bold">New Delight <span className="text-[#0A84FF]">POSHub</span></div>
         <div className="relative max-w-lg">
           <h1 className="font-display text-5xl font-semibold tracking-tight leading-[1.05]">The till that holds up in a real shop.</h1>
           <div className="grid grid-cols-2 gap-px bg-white/10 mt-10 border border-white/10">
@@ -72,7 +82,7 @@ export default function Login() {
       </div>
       <div className="flex flex-col p-6 sm:p-12">
         <div className="flex justify-between items-center">
-          <div className="font-display text-2xl font-bold lg:invisible">POS<span className="text-primary">Hub</span></div>
+          <div className="font-display text-2xl font-bold lg:invisible">New Delight <span className="text-primary">POSHub</span></div>
           <div className="flex gap-2"><LangSelect compact /><ThemeToggle /></div>
         </div>
         <div className="flex-1 flex items-center">
@@ -88,6 +98,10 @@ export default function Login() {
                   <Field label={t("email")}><Input type="email" required value={f.email} onChange={set("email")} className="h-12" data-testid="login-email-input" /></Field>
                   <Field label={t("password")}><Input type="password" required value={f.password} onChange={set("password")} className="h-12" data-testid="login-password-input" /></Field>
                   <Button type="submit" className="w-full h-12 active:scale-[0.98]" disabled={busy} data-testid="login-submit-btn">{busy ? "…" : t("sign_in")}</Button>
+                  {shop && <p className="text-sm text-center" data-testid="shop-login-banner">Signing in at <b>{shopName || shop}</b></p>}
+                  {!forgot ? <button type="button" className="text-sm underline text-muted-foreground" onClick={() => setForgot(true)} data-testid="forgot-password-link">Forgot password? (owner / manager)</button> : (
+                    <div className="border p-3 space-y-2" data-testid="forgot-password-box"><p className="text-xs text-muted-foreground">Enter your email above, then send. Staff: ask your owner or manager to reset your password.</p>
+                      <Button type="button" variant="outline" onClick={sendReset} disabled={!f.email} data-testid="forgot-send-btn">Email me a reset link</Button></div>)}
                 </form>
               </TabsContent>
               <TabsContent value="register">

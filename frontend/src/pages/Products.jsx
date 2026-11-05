@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/lib/i18n";
 import { api, errMsg } from "@/lib/api";
 import { fmt, toMinor, toMajorStr, pctStr, toBps } from "@/lib/money";
-import { PageHeader, DataTable, Field, useFetch, ExportBtn, exportCSV } from "@/components/common";
+import { PageHeader, DataTable, Field, FileField, fileUrl, useFetch, useCatBrand, ExportBtn, exportCSV } from "@/components/common";
 
 const blank = { name: "", sku: "", barcode: "", category_id: "", price: "", cost: "", tax: "5", image: "", station: "none", track_stock: true, is_raw: false, low_stock: "10", points: "0", brand_id: "", unit_id: "", rack_id: "", wholesale: "" };
 
@@ -58,7 +58,8 @@ function ProductForm({ edit, setEdit, cats, currency, onSaved }) {
             <Field label="Loyalty points per unit"><Input value={edit.points} onChange={set("points")} inputMode="numeric" data-testid="product-points-input" /></Field>
             <Field label="Barcode"><Input value={edit.barcode} onChange={set("barcode")} data-testid="product-barcode-input" /></Field>
             <Field label="SKU"><Input value={edit.sku} onChange={set("sku")} data-testid="product-sku-input" /></Field>
-            <Field label="Image URL" className="col-span-2"><Input value={edit.image || ""} onChange={set("image")} placeholder="/img/latte.jpg or https://…" data-testid="product-image-input" /></Field>
+            <FileField label="Product photo" value={edit.image?.includes("/api/files/") ? edit.image.split("/api/files/")[1] : ""} onChange={(id) => setEdit({ ...edit, image: fileUrl(id) })} accept="image/*" testid="product-image-file" />
+            <div className="flex items-end">{edit.image ? <img src={edit.image} alt="" className="w-16 h-16 object-cover rounded border" data-testid="product-image-preview" /> : <span className="text-xs text-muted-foreground">No photo yet</span>}</div>
             <Field label="Low-stock alert at"><Input value={edit.low_stock} onChange={set("low_stock")} inputMode="numeric" data-testid="product-lowstock-input" /></Field>
             <label className="flex items-center gap-3 pt-6 text-sm"><Switch checked={edit.track_stock} onCheckedChange={(v) => setEdit({ ...edit, track_stock: v })} data-testid="product-track-stock-switch" />Track stock</label>
             <label className="col-span-2 flex items-center gap-3 text-sm"><Switch checked={!!edit.is_raw} onCheckedChange={(v) => setEdit({ ...edit, is_raw: v })} data-testid="product-raw-switch" />Raw material (used in production, hidden from the till)</label>
@@ -76,14 +77,21 @@ export default function Products() {
   const c = business.currency;
   const { data: prods, reload } = useFetch("/products");
   const { data: cats, reload: reloadCats } = useFetch("/categories");
+  const { data: brands } = useFetch("/brands");
+  const cb = useCatBrand();
+  const [kind, setKind] = useState("");
   const [edit, setEdit] = useState(null);
   const [q, setQ] = useState("");
   const [newCat, setNewCat] = useState("");
   const catName = Object.fromEntries((cats || []).map((x) => [x.id, x.name]));
-  const rows = (prods || []).filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.barcode?.includes(q));
+  const brandName = Object.fromEntries((brands || []).map((x) => [x.id, x.name]));
+  const ql = q.toLowerCase();
+  const rows = (prods || []).filter((p) => cb.ok(p) && (!kind || (kind === "raw" ? p.is_raw : kind === "kit" ? p.is_kit : !p.is_raw && !p.is_kit)) &&
+    (!q || p.name.toLowerCase().includes(ql) || p.barcode?.includes(q) || p.sku?.toLowerCase().includes(ql) || p.hsn?.includes(q)));
   const cols = [
     { key: "image", label: "", render: (p) => p.image ? <img src={p.image} alt="" className="w-10 h-10 object-cover rounded" /> : <div className="w-10 h-10 bg-muted rounded" /> },
     { key: "name", label: "Name" }, { key: "cat", label: "Category", render: (p) => <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: (cats || []).find((x) => x.id === p.category_id)?.color }} />{catName[p.category_id] || "—"}</span> },
+    { key: "brand", label: "Brand", render: (p) => brandName[p.brand_id] || "—" },
     { key: "barcode", label: "Barcode" }, { key: "tax_bps", label: "Tax", render: (p) => pctStr(p.tax_bps) },
     { key: "cost", label: "Cost", money: true }, { key: "price", label: "Price", money: true },
     { key: "x", label: "", render: (p) => <Button size="icon" variant="ghost" onClick={async (e) => { e.stopPropagation(); await api.delete(`/products/${p.id}`); reload(); }} data-testid={`delete-product-${p.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button> },
@@ -96,13 +104,14 @@ export default function Products() {
         <Button onClick={() => setEdit({ ...blank, category_id: cats?.[0]?.id })} data-testid="add-product-btn"><Plus className="w-4 h-4 me-1" />New product</Button>
       </PageHeader>
       <div className="flex flex-wrap gap-2 mb-4 items-center">
-        <Input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" data-testid="products-search-input" />
+        <Input placeholder="Search name, barcode, SKU, HSN…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" data-testid="products-search-input" />
+        {cb.ui}
+        <select className="h-9 rounded-md border bg-background px-2 text-sm" value={kind} onChange={(e) => setKind(e.target.value)} data-testid="filter-product-kind"><option value="">All types</option><option value="sale">For sale</option><option value="raw">Raw materials</option><option value="kit">Gift packs</option></select>
         <div className="flex-1" />
-        {(cats || []).map((x) => <span key={x.id} className="text-xs px-2 py-1 bg-muted rounded">{x.name}</span>)}
         <Input placeholder="New category" value={newCat} onChange={(e) => setNewCat(e.target.value)} className="w-40 h-9" data-testid="new-category-input" />
         <Button size="sm" variant="outline" disabled={!newCat} onClick={async () => { await api.post("/categories", { name: newCat }); setNewCat(""); reloadCats(); }} data-testid="add-category-btn">Add</Button>
       </div>
-      <DataTable columns={cols} rows={rows} currency={c} testid="products-table" onRow={open} />
+      <DataTable columns={cols} rows={rows} currency={c} testid="products-table" onRow={open} search={false} />
       <ProductForm edit={edit} setEdit={setEdit} cats={cats || []} currency={c} onSaved={reload} />
       <div className="text-xs text-muted-foreground mt-3">{rows.length} products · prices in {c} ({fmt(100, c)} = 100 minor units)</div>
     </div>

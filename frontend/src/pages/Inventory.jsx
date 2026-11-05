@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/lib/i18n";
 import { api, errMsg } from "@/lib/api";
 import { toMinor } from "@/lib/money";
-import { PageHeader, DataTable, Field, useFetch, Pill } from "@/components/common";
+import { PageHeader, DataTable, Field, useFetch, useCatBrand, Pill } from "@/components/common";
 
 const REASONS = ["production", "opening", "damaged", "missing", "expired", "sample", "other"];
 
@@ -92,13 +92,17 @@ export default function Inventory({ view = "levels" }) {
   const { data: stock, reload } = useFetch(outletId ? `/stock?outlet_id=${outletId}` : null, [outletId]);
   const { data: ledger, reload: reloadLedger } = useFetch(outletId ? `/stock/ledger?outlet_id=${outletId}` : null, [outletId]);
   const [adj, setAdj] = useState(null);
+  const { data: prods } = useFetch("/products");
+  const cb = useCatBrand();
+  const pmap = Object.fromEntries((prods || []).map((p) => [p.id, p]));
+  const fit = (r) => !cb.active || cb.ok(pmap[r.product_id]);
   const done = () => { reload(); reloadLedger(); };
   const cols = [
     { key: "name", label: "Product" }, { key: "sku", label: "SKU" },
     { key: "qty", label: "On hand", num: true, render: (r) => !r.track_stock ? <Pill>service</Pill> : <span className={r.qty <= r.low_stock ? "text-warning font-medium" : ""}>{r.qty}</span> },
     { key: "avg_cost", label: "Avg cost", money: true }, { key: "value", label: "Stock value", money: true },
   ];
-  const rows = (stock || []).map((r) => ({ ...r, id: r.product_id, value: Math.max(r.qty, 0) * r.avg_cost }));
+  const rows = (stock || []).filter(fit).map((r) => ({ ...r, id: r.product_id, value: Math.max(r.qty, 0) * r.avg_cost }));
   const lcols = [
     { key: "created_at", label: "Time", date: true }, { key: "product_name", label: "Product" }, { key: "ref_type", label: "Movement" },
     { key: "qty", label: "Qty", num: true, render: (r) => <span className={r.qty < 0 ? "text-destructive" : "text-success"}>{r.qty > 0 ? `+${r.qty}` : r.qty}</span> },
@@ -106,14 +110,15 @@ export default function Inventory({ view = "levels" }) {
   ];
   return (
     <div>
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-wrap justify-between gap-2 mb-4">
+        {cb.ui}
         <Select value={outletId || ""} onValueChange={setOid}>
           <SelectTrigger className="w-56" data-testid="inventory-outlet-select"><SelectValue /></SelectTrigger>
           <SelectContent>{(outlets || []).map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
       {view === "levels" ? <DataTable columns={cols} rows={rows} currency={c} testid="stock-table" onRow={(r) => r.track_stock && setAdj(r)} />
-        : <DataTable columns={lcols} rows={ledger || []} currency={c} testid="ledger-table" />}
+        : <DataTable columns={lcols} rows={(ledger || []).filter(fit)} currency={c} testid="ledger-table" />}
       {view === "levels" && <p className="text-xs text-muted-foreground mt-2">Click a product to record production, damage, loss or expiry. Values in amber are at or below their low-stock minimum.</p>}
       <Adjust row={adj} outletId={outletId} currency={c} onDone={done} onClose={() => setAdj(null)} />
     </div>

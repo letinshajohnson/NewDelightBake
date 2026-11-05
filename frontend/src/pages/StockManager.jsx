@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 import { api, errMsg } from "@/lib/api";
-import { DataTable, Field, useFetch, Pill } from "@/components/common";
+import { DataTable, Field, useFetch, useCatBrand, Pill } from "@/components/common";
 import { Sel, LineEditor } from "@/pages/Purchasing";
 import { Adjust } from "@/pages/Inventory";
 
@@ -18,12 +18,14 @@ export function Adjustments() {
   const { data: prods } = useFetch("/products");
   const [pick, setPick] = useState({ outlet_id: "", product_id: "" });
   const [row, setRow] = useState(null);
+  const cb = useCatBrand();
   const oname = Object.fromEntries((outlets || []).map((o) => [o.id, o.name]));
   return (
     <div className="space-y-4">
+      {cb.ui}
       <div className="flex flex-wrap gap-2 items-end max-w-2xl">
         <Field label="Outlet" className="flex-1"><Sel value={pick.outlet_id} onChange={(v) => setPick({ ...pick, outlet_id: v })} options={outlets || []} testid="adj-outlet-select" /></Field>
-        <Field label="Product" className="flex-1"><Sel value={pick.product_id} onChange={(v) => setPick({ ...pick, product_id: v })} options={prods || []} testid="adj-product-select" /></Field>
+        <Field label="Product" className="flex-1"><Sel value={pick.product_id} onChange={(v) => setPick({ ...pick, product_id: v })} options={(prods || []).filter((p) => cb.ok(p) && !p.is_kit)} testid="adj-product-select" /></Field>
         <Button disabled={!pick.outlet_id || !pick.product_id} onClick={() => setRow({ product_id: pick.product_id, name: prods.find((p) => p.id === pick.product_id)?.name, qty: "?" })} data-testid="new-adjustment-btn"><Plus className="w-4 h-4 me-1" />New adjustment</Button>
       </div>
       <DataTable columns={[{ key: "created_at", label: "Date", date: true }, { key: "o", label: "Outlet", render: (r) => oname[r.outlet_id] }, { key: "product_name", label: "Product" },

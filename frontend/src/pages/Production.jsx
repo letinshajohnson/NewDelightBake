@@ -28,7 +28,7 @@ export function Recipes({ kits }) {
     catch (e) { toast.error(errMsg(e)); }
   };
   const targets = (prods || []).filter((x) => !x.is_raw);
-  const parts = (prods || []).filter((x) => (kits ? !x.is_raw && x.id !== pid : x.is_raw || x.id !== pid));
+  const parts = (prods || []).filter((x) => (kits ? !x.is_raw && !x.is_kit && x.id !== pid : x.is_raw));
   return (
     <div className="grid lg:grid-cols-[1fr_1fr] gap-8">
       <div className="space-y-4">
@@ -37,6 +37,7 @@ export function Recipes({ kits }) {
         {p && <>
           <Field label={kits ? "Packs made from these items" : "Pieces per batch"}><Input value={yieldQty} onChange={(e) => setYield(e.target.value)} className="w-32" data-testid="recipe-yield-input" /></Field>
           <div className="text-xs uppercase tracking-widest text-muted-foreground">{kits ? "Items inside the pack" : "Raw materials per batch (qty in the material's unit)"}</div>
+          {!kits && !parts.length && <p className="text-sm text-warning" data-testid="no-raw-hint">No raw materials yet. Mark products as "Raw material" in Catalog → Products, or import them.</p>}
           <LineEditor lines={lines} setLines={setLines} products={parts} />
           <Button onClick={save} data-testid="recipe-save-btn">Save {kits ? "kit" : "recipe"}</Button>
         </>}
@@ -82,18 +83,22 @@ export function ProductionRuns() {
 }
 
 const TEMPLATES = {
-  purchase: ["supplier", "supplier_gstin", "invoice_no", "date", "due_date", "item", "hsn", "mrp", "qty", "rate", "gst"],
+  purchase: ["supplier", "supplier_gstin", "invoice_no", "date", "due_date", "item", "barcode", "sku", "hsn", "mrp", "qty", "rate", "gst"],
+  stock: ["product", "barcode", "sku", "qty", "cost"],
+  recipes: ["product", "raw_material", "qty_per_batch", "pieces_per_batch"],
   products: ["name", "category", "unit", "raw_material", "sku", "barcode", "hsn", "price", "cost", "gst"],
   customers: ["name", "phone", "gstin"],
   suppliers: ["name", "type", "phone", "gstin", "terms_days"],
   expenses: ["date", "category", "amount", "method", "note"],
 };
 const SAMPLES = {
-  purchase: [["LACHMANDAS ENTERPRISES", "32AAJFL3539N1Z0", "LE/26-27/039769", "2026-10-31", "2026-11-15", "SAMPLE ITEM 50G", "19053100", "35.00", "10", "29.76", "5"]],
+  purchase: [["LACHMANDAS ENTERPRISES", "32AAJFL3539N1Z0", "LE/26-27/039769", "2026-10-31", "2026-11-15", "SAMPLE ITEM 50G", "", "", "19053100", "35.00", "10", "29.76", "5"]],
+  stock: [["Maida flour", "", "", "25000", "0.04"]],
+  recipes: [["Plum cake 500g", "Maida flour", "2000", "8"], ["Plum cake 500g", "Eggs", "20", "8"]],
   products: [["Maida flour", "Raw materials", "kg", "yes", "", "", "1101", "0", "42.00", "0"]],
   expenses: [["2026-11-01", "Staff salary", "15000", "cash", "[Staff name] October salary"]],
 };
-const LABELS = { purchase: "Purchase bills", products: "Products & raw materials", customers: "Customers", suppliers: "Suppliers & agents", expenses: "Expenses" };
+const LABELS = { purchase: "Purchase bills", products: "Products & raw materials", stock: "Opening stock", recipes: "Raw materials per item", customers: "Customers", suppliers: "Suppliers & agents", expenses: "Expenses" };
 
 async function readSheet(file) {
   const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true, dateNF: "yyyy-mm-dd" });
@@ -112,15 +117,15 @@ function download(name, head, body, format) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${name}.csv`; a.click();
 }
 
-export function ImportExport() {
+export function ImportExport({ only }) {
   const { business } = useAuth();
   const { data: outlets } = useFetch("/outlets");
-  const [kind, setKind] = useState("purchase");
+  const [kind, setKind] = useState(only ? only[0] : "purchase");
   const [rows, setRows] = useState([]);
   const [outlet, setOutlet] = useState("");
   const [format, setFormat] = useState("xlsx");
   const template = () => download(`${kind}-template`, TEMPLATES[kind], SAMPLES[kind] || [], format);
-  const needOutlet = kind === "purchase";
+  const needOutlet = kind === "purchase" || kind === "stock";
   const run = async () => {
     try { const { data } = await api.post(`/import/${kind}`, { rows, outlet_id: outlet }); toast.success(`Imported ${data.imported} ${kind === "purchase" ? "bills" : "records"}`); setRows([]); setFile(""); }
     catch (e) { toast.error(errMsg(e)); }
@@ -140,9 +145,9 @@ export function ImportExport() {
           {[["xlsx", "Excel (.xlsx)"], ["csv", "CSV"]].map(([k, l]) => <Button key={k} size="sm" variant={format === k ? "default" : "outline"} onClick={() => setFormat(k)} data-testid={`format-${k}`}>{l}</Button>)}
         </div>
         <div className="text-xs uppercase tracking-widest text-muted-foreground pt-2">Import</div>
-        <div className="flex flex-wrap gap-2">{Object.keys(TEMPLATES).map((k) => <Button key={k} size="sm" variant={kind === k ? "default" : "outline"} onClick={() => { setKind(k); setRows([]); setFile(""); }} data-testid={`import-kind-${k}`}>{LABELS[k]}</Button>)}</div>
+        <div className="flex flex-wrap gap-2">{Object.keys(TEMPLATES).filter((k) => !only || only.includes(k)).map((k) => <Button key={k} size="sm" variant={kind === k ? "default" : "outline"} onClick={() => { setKind(k); setRows([]); setFile(""); }} data-testid={`import-kind-${k}`}>{LABELS[k]}</Button>)}</div>
         <p className="text-sm text-muted-foreground">Columns: <code>{TEMPLATES[kind].join(", ")}</code>. Dates as YYYY-MM-DD, amounts in rupees.{kind === "purchase" && " One row per bill line, like your GST invoices (HSN, MRP, Qty, Rate before GST, GST %). Rows with the same supplier + invoice no. become one received purchase; new items and suppliers are created automatically. Have a photo instead? Use the Scan purchase bill tab."}{kind === "products" && " Put yes in raw_material for flour, eggs, packing etc."}</p>
-        {(needOutlet || kind === "expenses") && <Field label={needOutlet ? "Receive stock into" : "Outlet (optional)"}><Sel value={outlet} onChange={setOutlet} options={outlets || []} testid="import-outlet-select" /></Field>}
+        {(needOutlet || kind === "expenses") && <Field label={kind === "purchase" ? "Receive stock into" : kind === "stock" ? "Stock is at" : "Outlet (optional)"}><Sel value={outlet} onChange={setOutlet} options={outlets || []} testid="import-outlet-select" /></Field>}
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={template} data-testid="import-template-btn"><Download className="w-4 h-4 me-2" />Template</Button>
           <label className="inline-flex items-center gap-2 px-4 h-9 border rounded-md text-sm cursor-pointer hover:bg-accent" data-testid="import-file-label"><Upload className="w-4 h-4" />{file || "Choose Excel or CSV"}
@@ -150,11 +155,11 @@ export function ImportExport() {
           <Button disabled={!rows.length || (needOutlet && !outlet)} onClick={run} data-testid="import-run-btn">Import {rows.length || ""} rows</Button>
         </div>
       </div>
-      <div className="space-y-3">
+      {!only && <div className="space-y-3">
         <div className="text-xs uppercase tracking-widest text-muted-foreground">Export ({format === "xlsx" ? "Excel" : "CSV"})</div>
         {[["/products", "products"], ["/customers", "customers"], ["/suppliers", "suppliers"], ["/purchase-orders", "purchases"], ["/sales", "sales"], ["/cash", "expenses-and-cash"], ["/production", "production"], ["/stock/ledger", "stock-ledger"]].map(([u, n]) => (
           <Button key={n} variant="outline" className="me-2 mb-2" onClick={() => exp(u, n)} data-testid={`export-${n}`}><Download className="w-4 h-4 me-2" />{n}</Button>))}
-      </div>
+      </div>}
     </div>
   );
 }

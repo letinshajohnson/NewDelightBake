@@ -13,6 +13,9 @@ import { Adjustments, StockTake, Transfers } from "@/pages/StockManager";
 import { CashList, PaymentMethods, Payables, SalesReturns, VoidedSales, BusinessObject } from "@/pages/Finance";
 import { Recipes, ProductionRuns, ImportExport } from "@/pages/Production";
 import BillScan from "@/pages/BillScan";
+import SalesOrders from "@/pages/SalesOrders";
+import { Attendance, Salary } from "@/pages/Staff";
+import Audit from "@/pages/Audit";
 
 const PERMS = ["pos", "sales.view", "sales.void", "returns", "customers", "catalog", "stock", "purchasing", "finance", "reports", "settings", "users", "shifts", "cost.view"]
   .map((p) => [p, p]);
@@ -39,12 +42,15 @@ export const SECTIONS = {
     ["brands", "Brand", () => <Crud endpoint="brands" title="brand" hint="Brands help you filter sales reports by manufacturer — your own and other brands you resell." fields={[{ key: "name", label: "Brand" }, { key: "own", label: "Our own brand", type: "bool" }]} />],
   ]),
   production: S("Production", "Recipes, production runs and gift kits for your own products.", [
-    ["runs", "Production runs", () => <ProductionRuns />], ["recipes", "Raw materials per item", () => <Recipes />], ["kits", "Gift packs & kits", () => <Recipes kits />],
+    ["runs", "Production runs", () => <ProductionRuns />], ["recipes", "Raw materials per item", () => <Recipes />], ["kits", "Gift packs & kits", () => <Recipes kits />], ["import", "Import", () => <ImportExport only={["products", "stock", "recipes"]} />],
   ]),
   data: S("Import / export", "Bring data in from Excel or CSV, read purchase bills from a photo, and take everything out.", [["all", "Import & export", () => <ImportExport />], ["scan", "Scan purchase bill", () => <BillScan />]]),
   purchasing: S("Purchasing", "Orders to suppliers, goods sent back, and cancelled orders.", [
     ["orders", "Purchase orders", () => <PurchaseOrders />], ["scan", "Bill from photo", () => <BillScan />], ["returns", "Purchase returns", () => <PurchaseReturns />], ["cancelled", "Cancelled purchases", () => <PurchaseOrders cancelled />],
   ]),
+  orders: S("Customer orders", "Advance orders: who ordered, when to deliver or pick up, what was paid. Order alert SMS text is prepared for each change (not sent until an SMS account is connected).", [["all", "Orders", () => <SalesOrders />]]),
+  hr: S("Staff & attendance", "Daily attendance for kitchen, cashier and helping staff, and the salary it works out to.", [["attendance", "Attendance", () => <Attendance />], ["salary", "Salary report", () => <Salary />]]),
+  audit: S("Audit log", "Who did what, when and where. Red rows are risky actions: failed sign-ins, refused actions, deletes, voids, staff and settings changes.", [["all", "All activity", () => <Audit />], ["danger", "Danger only", () => <Audit level="danger" />]]),
   sales: S("Sales", "Receipts from the register, goods brought back, and voided receipts.", [
     ["transactions", "Sales transactions", () => <Sales />], ["returns", "Sales returns", () => <SalesReturns />], ["voided", "Voided sales", () => <VoidedSales />],
   ]),
@@ -81,7 +87,7 @@ export const SECTIONS = {
     ["roles", "Roles & permissions", () => <Crud endpoint="roles" title="role" hint="Each role belongs to your business only. Tick what each role may do." fields={[{ key: "name", label: "Role name" }, { key: "base", label: "Based on", type: "select", options: [["manager", "Manager"], ["cashier", "Cashier"], ["waiter", "Waiter"], ["kitchen", "Kitchen"]] }, { key: "permissions", label: "Permissions", type: "multi", options: PERMS }]} />],
   ]),
 };
-const STAFF_OK = ["sales", "crm"];
+const STAFF_OK = ["sales", "crm", "orders"];
 
 export default function Section() {
   const { section, tab } = useParams();

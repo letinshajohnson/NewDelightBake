@@ -7,7 +7,8 @@ import { api, errMsg } from "@/lib/api";
 import { fmt } from "@/lib/money";
 import { LANGS, useI18n } from "@/lib/i18n";
 import * as XLSX from "xlsx";
-import { useTheme } from "@/context/AuthContext";
+import { useTheme, useAuth } from "@/context/AuthContext";
+import { Printer } from "lucide-react";
 import { toast } from "sonner";
 
 export function useFetch(url, deps = []) {
@@ -81,8 +82,14 @@ export function exportCSV(name, columns, rows, currency, format = "csv") {
   a.click();
 }
 
-export function DataTable({ columns, rows, currency, testid, onRow, empty = "Nothing here yet" }) {
+const matches = (r, q) => Object.values(r).some((v) => (typeof v === "string" || typeof v === "number") && String(v).toLowerCase().includes(q));
+
+export function DataTable({ columns, rows: all, currency, testid, onRow, empty = "Nothing here yet", search = true }) {
+  const [q, setQ] = useState("");
+  const rows = q ? all.filter((r) => matches(r, q.toLowerCase())) : all;
   return (
+    <div className="space-y-2">
+    {search && all.length > 0 && <input className="no-print h-9 w-full max-w-xs rounded-md border bg-background px-3 text-sm" placeholder="Search name, number, invoice…" value={q} onChange={(e) => setQ(e.target.value)} data-testid={`${testid}-search`} />}
     <div className="border bg-card overflow-x-auto" data-testid={testid}>
       <table className="w-full text-sm">
         <thead>
@@ -105,7 +112,80 @@ export function DataTable({ columns, rows, currency, testid, onRow, empty = "Not
         </tbody>
       </table>
     </div>
+    </div>
   );
+}
+
+export const RETURN_REASONS = ["Expired", "Damaged", "Wrong item", "Quality issue", "Near expiry", "Excess stock", "Customer changed mind"];
+
+export const ReasonInput = ({ value, onChange, testid }) => (
+  <Field label="Return reason (pick or type your own)">
+    <input list={`${testid}-list`} className="w-full h-9 rounded-md border bg-background px-3 text-sm" value={value} onChange={(e) => onChange(e.target.value)} placeholder="e.g. Expired" data-testid={testid} />
+    <datalist id={`${testid}-list`}>{RETURN_REASONS.map((r) => <option key={r} value={r} />)}</datalist>
+  </Field>
+);
+
+export function PrintBtn({ kind, id }) {
+  const { business } = useAuth();
+  const go = (mode) => window.open(`/print/${kind}/${id}?mode=${mode}`, "_blank");
+  return (
+    <span className="inline-flex gap-2">
+      {business.gst_applicable && <Button variant="outline" size="sm" onClick={() => go("gst")} data-testid={`print-gst-${kind}`}><Printer className="w-4 h-4 me-1" />GST invoice</Button>}
+      <Button variant="outline" size="sm" onClick={() => go("receipt")} data-testid={`print-receipt-${kind}`}><Printer className="w-4 h-4 me-1" />{business.gst_applicable ? "Receipt" : "Print"}</Button>
+    </span>
+  );
+}
+
+export async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const { data } = await api.post("/files", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  return data;
+}
+
+export const fileUrl = (id) => `${process.env.REACT_APP_BACKEND_URL}/api/files/${id}`;
+
+export function FileField({ label, value, onChange, accept = "image/*,application/pdf", testid }) {
+  const [busy, setBusy] = useState(false);
+  const pick = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setBusy(true);
+    try { const d = await uploadFile(f); onChange(d.id); toast.success("Uploaded"); } catch (err) { toast.error(errMsg(err)); }
+    setBusy(false);
+    e.target.value = "";
+  };
+  return (
+    <Field label={label}>
+      <div className="flex items-center gap-2">
+        <label className="inline-flex items-center h-9 px-3 border rounded-md text-sm cursor-pointer hover:bg-accent" data-testid={`${testid}-label`}>{busy ? "Uploading…" : value ? "Replace file" : "Upload"}
+          <input type="file" accept={accept} className="hidden" onChange={pick} data-testid={testid} /></label>
+        {value && <a href={fileUrl(value)} target="_blank" rel="noreferrer" className="text-sm underline" data-testid={`${testid}-view`}>View</a>}
+      </div>
+    </Field>
+  );
+}
+
+export function useCatBrand() {
+  const { data: cats } = useFetch("/categories");
+  const { data: brands } = useFetch("/brands");
+  const [cat, setCat] = useState("");
+  const [brand, setBrand] = useState("");
+  const sel = (v, set, opts, ph, tid) => (
+    <select className="h-9 rounded-md border bg-background px-2 text-sm" value={v} onChange={(e) => set(e.target.value)} data-testid={tid}>
+      <option value="">{ph}</option>{(opts || []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+    </select>);
+  const ui = <div className="flex flex-wrap gap-2 no-print">{sel(cat, setCat, cats, "All categories", "filter-category")}{sel(brand, setBrand, brands, "All brands", "filter-brand")}</div>;
+  const ok = (p) => p && (!cat || p.category_id === cat) && (!brand || p.brand_id === brand);
+  return { ui, ok, active: !!(cat || brand) };
+}
+
+export function OutletFilter({ value, onChange }) {
+  const { data } = useFetch("/outlets");
+  return (
+    <select className="h-9 rounded-md border bg-background px-2 text-sm no-print" value={value} onChange={(e) => onChange(e.target.value)} data-testid="filter-outlet">
+      <option value="">All outlets / units</option>{(data || []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+    </select>);
 }
 
 export const ExportBtn = ({ onClick, testid = "export-csv-btn" }) => (

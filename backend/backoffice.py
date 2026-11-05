@@ -5,7 +5,7 @@ from core import db, uid, now_iso, get_user, require, get_business, MANAGERS
 from sales import move_stock
 
 router = APIRouter()
-DEFAULT_PREFIX = {"sale": "INV", "po": "PO", "pr": "PR", "tr": "TR", "st": "ST", "ret": "RET"}
+DEFAULT_PREFIX = {"sale": "INV", "po": "PO", "pr": "PR", "tr": "TR", "st": "ST", "ret": "RET", "so": "SO"}
 
 
 async def next_no(b, kind):
@@ -84,6 +84,16 @@ async def receive_po(pid: str, data: dict = Body(...), user=Depends(require(*MAN
     return {"ok": True, "status": status, "value": value}
 
 
+@router.post("/purchase-orders/{pid}/bill")
+async def attach_bill(pid: str, data: dict = Body(...), user=Depends(require(*MANAGERS))):
+    await _po(user, pid)
+    f = await db.files.find_one({"id": data.get("file_id"), "business_id": user["business_id"]})
+    if not f:
+        raise HTTPException(400, "Upload the bill first")
+    await db.purchase_orders.update_one({"id": pid}, {"$push": {"bills": {"file_id": f["id"], "name": f["name"], "at": now_iso(), "by": user["name"]}}})
+    return {"ok": True}
+
+
 @router.post("/purchase-orders/{pid}/cancel")
 async def cancel_po(pid: str, data: dict = Body(default={}), user=Depends(require(*MANAGERS))):
     po = await _po(user, pid)
@@ -97,7 +107,7 @@ async def cancel_po(pid: str, data: dict = Body(default={}), user=Depends(requir
 async def pay_po(pid: str, data: dict = Body(...), user=Depends(require(*MANAGERS))):
     po = await _po(user, pid)
     amt = int(data.get("amount") or 0)
-    if amt <= 0 or amt > po["received_value"] - po["paid"]:
+    if amt <= 0 or amt > po["received_value"] - po.get("returned_value", 0) - po["paid"]:
         raise HTTPException(400, "Amount must be between 0 and the unpaid balance")
     pay = {"amount": amt, "method": data.get("method", "cash"), "at": now_iso(), "by": user["name"]}
     await db.purchase_orders.update_one({"id": pid}, {"$inc": {"paid": amt}, "$push": {"payments": pay}})
@@ -131,7 +141,7 @@ async def create_preturn(data: dict = Body(...), user=Depends(require(*MANAGERS)
         amount += q * l["cost"]
     if not lines:
         raise HTTPException(400, "Choose at least one item")
-    await db.purchase_orders.update_one({"id": po["id"]}, {"$set": {"lines": po["lines"]}})
+    await db.purchase_orders.update_one({"id": po["id"]}, {"$set": {"lines": po["lines"]}, "$inc": {"returned_value": amount}})
     doc = {"id": rid, "business_id": po["business_id"], "number": await next_no(b, "pr"), "po_id": po["id"], "po_number": po["number"],
            "supplier_name": po.get("supplier_name"), "outlet_id": po["outlet_id"], "lines": lines, "amount": amount, "collected": 0,
            "reason": data.get("reason"), "created_by": user["name"], "created_at": now_iso()}
@@ -159,8 +169,8 @@ async def payables(user=Depends(require(*MANAGERS))):
     t = today(b)
     pos = await db.purchase_orders.find({"business_id": b["id"], "status": {"$ne": "cancelled"}}, {"_id": 0}).to_list(5000)
     rows = [{"id": p["id"], "number": p["number"], "party": p.get("supplier_name"), "date": p["created_at"], "due_date": p.get("due_date"),
-             "amount": p["received_value"], "paid": p["paid"], "balance": p["received_value"] - p["paid"],
-             "overdue": bool(p.get("due_date") and p["due_date"] < t)} for p in pos if p["received_value"] - p["paid"] > 0]
+             "amount": p["received_value"] - p.get("returned_value", 0), "paid": p["paid"], "balance": p["received_value"] - p.get("returned_value", 0) - p["paid"],
+             "overdue": bool(p.get("due_date") and p["due_date"] < t)} for p in pos if p["received_value"] - p.get("returned_value", 0) - p["paid"] > 0]
     return sorted(rows, key=lambda r: r["due_date"] or "9")
 
 

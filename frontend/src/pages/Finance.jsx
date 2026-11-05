@@ -6,8 +6,8 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/context/AuthContext";
 import { api, errMsg } from "@/lib/api";
 import { fmt, toMinor, toBps, pctStr } from "@/lib/money";
-import { DataTable, Field, useFetch, Pill, Stat } from "@/components/common";
-import { Sel } from "@/pages/Purchasing";
+import { DataTable, Field, useFetch, Pill, Stat, OutletFilter } from "@/components/common";
+import { Sel, ReturnDetail } from "@/pages/Purchasing";
 
 export function CashList({ type }) {
   const { business } = useAuth();
@@ -17,11 +17,13 @@ export function CashList({ type }) {
   const { data: outlets } = useFetch("/outlets");
   const [f, setF] = useState({ category: "", amount: "", note: "", outlet_id: "", date: "" });
   const [q, setQ] = useState("");
+  const [of, setOf] = useState("");
+  const oname = Object.fromEntries((outlets || []).map((o) => [o.id, o.name]));
   const add = async () => {
     try { await api.post("/cash", { ...f, type, amount: toMinor(f.amount, c) }); toast.success("Recorded"); setF({ ...f, amount: "", note: "" }); reload(); }
     catch (e) { toast.error(errMsg(e)); }
   };
-  const rows = (data || []).filter((x) => x.type === type && (!q || `${x.category} ${x.note || ""}`.toLowerCase().includes(q.toLowerCase())));
+  const rows = (data || []).filter((x) => x.type === type && (!of || x.outlet_id === of) && (!q || `${x.category} ${x.note || ""}`.toLowerCase().includes(q.toLowerCase())));
   const catOpts = (cats || []).filter((x) => x.type === type).map((x) => x.name);
   const sugg = [...new Set([...catOpts, ...(type === "out" ? ["Staff salary", "Rent", "Miscellaneous purchase"] : [])])];
   return (
@@ -34,8 +36,8 @@ export function CashList({ type }) {
         <Field label={type === "out" ? "Note (paid to / what for)" : "Note"}><Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} data-testid={`cash-${type}-note`} /></Field>
         <Button onClick={add} disabled={!toMinor(f.amount, c) || !f.category} data-testid={`cash-${type}-save`}>Record cash {type}</Button>
       </div>
-      <Input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" data-testid={`cash-${type}-search`} />
-      <DataTable columns={[{ key: "created_at", label: "Date", date: true }, { key: "category", label: "Category" }, { key: "note", label: "Note" }, { key: "user_name", label: "By" },
+      <div className="flex flex-wrap gap-2"><Input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" data-testid={`cash-${type}-search`} /><OutletFilter value={of} onChange={setOf} /></div>
+      <DataTable search={false} columns={[{ key: "created_at", label: "Date", date: true }, { key: "o", label: "Outlet / unit", render: (r) => oname[r.outlet_id] || "—" }, { key: "category", label: "Category" }, { key: "note", label: "Note" }, { key: "user_name", label: "By" },
         { key: "s", label: "Source", render: (r) => <Pill>{r.shift_id ? "till" : "back office"}</Pill> }, { key: "amount", label: "Amount", money: true }]} rows={rows} currency={c} testid={`cash-${type}-table`} />
     </div>
   );
@@ -102,10 +104,14 @@ export function Payables() {
 export function SalesReturns() {
   const { business } = useAuth();
   const { data } = useFetch("/returns");
-  return <DataTable columns={[{ key: "receipt_no", label: "From receipt" }, { key: "created_at", label: "Date", date: true }, { key: "by_name", label: "By" },
-    { key: "refund_method", label: "Refunded as", render: (r) => <Pill>{r.refund_method.replace("_", " ")}</Pill> }, { key: "reason", label: "Reason" },
-    { key: "n", label: "Items", render: (r) => r.lines.map((l) => `${l.qty}× ${l.name}`).join(", ") }, { key: "amount", label: "Amount", money: true }]}
-    rows={data || []} currency={business.currency} testid="sales-returns-table" />;
+  const [sel, setSel] = useState(null);
+  return <>
+    <DataTable columns={[{ key: "receipt_no", label: "From receipt" }, { key: "created_at", label: "Date", date: true }, { key: "by_name", label: "By" },
+      { key: "refund_method", label: "Refunded as", render: (r) => <Pill>{r.refund_method.replace("_", " ")}</Pill> }, { key: "reason", label: "Reason" },
+      { key: "n", label: "Qty", render: (r) => r.lines.reduce((s, l) => s + l.qty, 0) }, { key: "amount", label: "Amount", money: true }]}
+      rows={data || []} currency={business.currency} testid="sales-returns-table" onRow={setSel} />
+    <ReturnDetail r={sel} onClose={() => setSel(null)} currency={business.currency} kind="sale_return" />
+  </>;
 }
 
 export function VoidedSales() {

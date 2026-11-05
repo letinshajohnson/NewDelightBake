@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { api, errMsg } from "@/lib/api";
 import { fmt } from "@/lib/money";
 import { queue } from "@/lib/offline";
-import { PageHeader, DataTable, useFetch, Pill, ExportBtn, exportCSV } from "@/components/common";
+import { PageHeader, DataTable, useFetch, Pill, ExportBtn, exportCSV, ReasonInput, PrintBtn } from "@/components/common";
 
 function SaleDetail({ id, onClose, currency, user, onChanged }) {
   const { data: s, reload } = useFetch(id ? `/sales/${id}` : null, [id]);
@@ -42,13 +42,14 @@ function SaleDetail({ id, onClose, currency, user, onChanged }) {
               <span className="text-muted-foreground">{new Date(s.created_at).toLocaleString()} · {s.cashier_name}{s.customer_name ? ` · ${s.customer_name}` : ""}</span>
             </div>
             <div className="border divide-y">
+              {s.status === "completed" && <div className="flex px-3 py-1.5 text-xs uppercase tracking-wider text-muted-foreground bg-muted/40"><span className="flex-1">Item</span><span className="w-24 text-end">Amount</span><span className="w-16 text-center">Return qty</span></div>}
               {s.lines.map((l, i) => (
                 <div key={i} className="flex items-center gap-3 px-3 py-2">
                   <div className="flex-1">{l.qty} × {l.name}{returned[i] ? <span className="text-warning ms-2">({returned[i]} returned)</span> : null}
                     <div className="text-xs text-muted-foreground">cost snapshot {fmt(l.unit_cost, currency)}/unit · disc {fmt(l.discount + l.order_alloc, currency)} · tax {fmt(l.tax, currency)}</div></div>
                   <span className="tabular">{fmt(l.line_total, currency)}</span>
                   {s.status === "completed" && (
-                    <Input type="number" min={0} max={l.qty - (returned[i] || 0)} value={ret[i] || ""} placeholder="0" onChange={(e) => setRet({ ...ret, [i]: Math.min(+e.target.value, l.qty - (returned[i] || 0)) })} className="w-16 h-8" data-testid={`return-qty-${i}`} />
+                    <Input type="number" min={0} max={l.qty - (returned[i] || 0)} value={ret[i] || ""} placeholder="return" onChange={(e) => setRet({ ...ret, [i]: Math.min(+e.target.value, l.qty - (returned[i] || 0)) })} className="w-16 h-8" title="Quantity to return" data-testid={`return-qty-${i}`} />
                   )}
                 </div>
               ))}
@@ -61,10 +62,15 @@ function SaleDetail({ id, onClose, currency, user, onChanged }) {
               <span className="font-bold">Total</span><span className="text-end tabular font-bold" data-testid="sale-detail-total">{fmt(s.total, currency)}</span>
               {s.payments.map((p, i) => <Fragment key={`p${i}`}><span className="uppercase text-muted-foreground">{p.method}</span><span className="text-end tabular text-muted-foreground">{fmt(p.amount, currency)}</span></Fragment>)}
               <span className="text-muted-foreground">Cost of goods</span><span className="text-end tabular text-muted-foreground">{fmt(s.cogs, currency)}</span>
+              {(s.returns || []).map((r) => <Fragment key={r.id}><span className="text-warning" data-testid={`sale-refund-${r.id}`}>Refunded ({r.refund_method?.replace("_", " ")}) — {r.reason || "no reason"}</span><span className="text-end tabular text-warning">-{fmt(r.amount, currency)}</span></Fragment>)}
+              {s.void_reason && <><span className="text-destructive">Void reason</span><span className="text-end text-destructive">{s.void_reason}</span></>}
+            </div>
+            <div className="flex justify-end"><PrintBtn kind="sale" id={s.id} /></div>
+            <div className="hidden">
             </div>
             {s.status === "completed" && (
               <div className="border-t pt-4 space-y-3">
-                <Input placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} data-testid="sale-reason-input" />
+                <ReasonInput value={reason} onChange={setReason} testid="sale-reason-input" />
                 <div className="flex flex-wrap gap-2">
                   <Select value={method} onValueChange={setMethod}>
                     <SelectTrigger className="w-40" data-testid="refund-method-select"><SelectValue /></SelectTrigger>

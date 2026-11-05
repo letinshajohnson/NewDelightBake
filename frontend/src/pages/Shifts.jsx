@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/lib/i18n";
 import { fmt } from "@/lib/money";
-import { PageHeader, DataTable, useFetch, Pill } from "@/components/common";
+import { PageHeader, DataTable, useFetch, Pill, OutletFilter } from "@/components/common";
 
 function ShiftDetail({ id, onClose, currency, business }) {
   const { data: s } = useFetch(id ? `/shifts/${id}` : null, [id]);
@@ -55,19 +55,22 @@ export default function Shifts() {
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
   const [range, setRange] = useState({ from: "", to: "" });
-  const cashRows = (cash || []).filter((x) => (!q || `${x.category} ${x.note || ""}`.toLowerCase().includes(q.toLowerCase()))
+  const [of, setOf] = useState("");
+  const { data: outlets } = useFetch("/outlets");
+  const oname = Object.fromEntries((outlets || []).map((o) => [o.id, o.name]));
+  const cashRows = (cash || []).filter((x) => (!of || x.outlet_id === of) && (!q || `${x.category} ${x.note || ""}`.toLowerCase().includes(q.toLowerCase()))
     && (!range.from || x.created_at.slice(0, 10) >= range.from) && (!range.to || x.created_at.slice(0, 10) <= range.to));
   return (
     <div>
-      <PageHeader title={t("shifts")} sub="Shifts, sales and cash movements made offline keep the device time and sync in order, so the close-out stays right." />
+      <PageHeader title={t("shifts")} sub="Shifts, sales and cash movements made offline keep the device time and sync in order, so the close-out stays right."><OutletFilter value={of} onChange={setOf} /></PageHeader>
       <Tabs defaultValue="shifts">
         <TabsList className="mb-4"><TabsTrigger value="shifts" data-testid="tab-shifts">Shifts</TabsTrigger><TabsTrigger value="cash" data-testid="tab-cash">Cash in / out</TabsTrigger></TabsList>
         <TabsContent value="shifts">
-          <DataTable columns={[{ key: "cashier_name", label: "Cashier" }, { key: "opened_at", label: "Opened", date: true }, { key: "closed_at", label: "Closed", date: true },
+          <DataTable columns={[{ key: "o", label: "Outlet / unit", render: (r) => oname[r.outlet_id] || "—" }, { key: "cashier_name", label: "Cashier" }, { key: "opened_at", label: "Opened", date: true }, { key: "closed_at", label: "Closed", date: true },
             { key: "status", label: "Status", render: (r) => <Pill tone={r.status === "open" ? "info" : "muted"}>{r.status}</Pill> },
             { key: "opening_cash", label: "Opening", money: true }, { key: "expected_cash", label: "Expected", money: true }, { key: "counted_cash", label: "Counted", money: true },
             { key: "difference", label: "Difference", money: true, render: (r) => r.difference == null ? "—" : <span className={r.difference ? "text-warning" : "text-success"}>{fmt(r.difference, c)}</span> }]}
-            rows={shifts || []} currency={c} testid="shifts-table" onRow={(r) => setSel(r.id)} />
+            rows={(shifts || []).filter((r) => !of || r.outlet_id === of)} currency={c} testid="shifts-table" onRow={(r) => setSel(r.id)} />
         </TabsContent>
         <TabsContent value="cash" className="space-y-3">
           <div className="flex flex-wrap gap-2">

@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, isManager } from "@/context/AuthContext";
 import { api, errMsg } from "@/lib/api";
 import { fmt, toMinor, toMajorStr, toBps, pctStr } from "@/lib/money";
-import { DataTable, Field, useFetch } from "@/components/common";
+import { DataTable, Field, FileField, useFetch, fileUrl } from "@/components/common";
 
 // fields: {key, label, type: text|number|money|pct|color|bool|select|multi, options:[[v,l]], table?: bool}
 const show = (f, r, c) => {
@@ -17,6 +17,7 @@ const show = (f, r, c) => {
   if (f.type === "pct") return pctStr(v);
   if (f.type === "color") return <span className="inline-flex items-center gap-2"><span className="w-4 h-4 rounded" style={{ background: v }} />{v}</span>;
   if (f.type === "bool") return v ? "yes" : "no";
+  if (f.type === "file") return v ? <a href={fileUrl(v)} target="_blank" rel="noreferrer" className="underline" onClick={(e) => e.stopPropagation()}>view</a> : "—";
   if (f.type === "select") return f.options.find((o) => o[0] === v)?.[1] || "—";
   if (f.type === "multi") return (v || []).length ? (v || []).map((x) => f.options.find((o) => o[0] === x)?.[1] || x).join(", ") : "—";
   return v ?? "—";
@@ -33,11 +34,13 @@ function Input2({ f, v, set }) {
   if (f.type === "multi") return (
     <div className="flex flex-wrap gap-1.5" data-testid={`crud-field-${f.key}`}>{f.options.map(([o, l]) => (
       <Button key={o} type="button" size="sm" variant={(v || []).includes(o) ? "default" : "outline"} onClick={() => set((v || []).includes(o) ? v.filter((x) => x !== o) : [...(v || []), o])}>{l}</Button>))}</div>);
-  return <Input type={f.type === "color" ? "color" : "text"} value={v} onChange={(e) => set(e.target.value)} className={f.type === "color" ? "h-9 w-20 p-1" : ""} data-testid={`crud-field-${f.key}`} />;
+  if (f.type === "file") return <FileField label="" value={v} onChange={set} testid={`crud-field-${f.key}`} />;
+  return <Input type={f.type === "color" ? "color" : f.type === "date" ? "date" : "text"} value={v} onChange={(e) => set(e.target.value)} className={f.type === "color" ? "h-9 w-20 p-1" : ""} data-testid={`crud-field-${f.key}`} />;
 }
 
 export default function Crud({ endpoint, fields, title, hint, defaults = {}, readOnly }) {
-  const { business } = useAuth();
+  const { business, user } = useAuth();
+  const canDelete = isManager(user) && !readOnly;
   const c = business.currency;
   const { data, reload } = useFetch(`/${endpoint}`, [endpoint]);
   const [edit, setEdit] = useState(null);
@@ -50,7 +53,7 @@ export default function Crud({ endpoint, fields, title, hint, defaults = {}, rea
     } catch (e) { toast.error(errMsg(e)); }
   };
   const cols = [...fields.filter((f) => f.table !== false).map((f) => ({ key: f.key, label: f.label, render: (r) => show(f, r, c) })),
-    ...(readOnly ? [] : [{ key: "_x", label: "", render: (r) => <Button size="icon" variant="ghost" onClick={async (e) => { e.stopPropagation(); if (!window.confirm(`Remove ${r[fields[0].key]}?`)) return; await api.delete(`/${endpoint}/${r.id}`); reload(); }} data-testid={`crud-delete-${r.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button> }])];
+    ...(!canDelete ? [] : [{ key: "_x", label: "", render: (r) => <Button size="icon" variant="ghost" onClick={async (e) => { e.stopPropagation(); if (!window.confirm(`Remove ${r[fields[0].key]}?`)) return; await api.delete(`/${endpoint}/${r.id}`); reload(); }} data-testid={`crud-delete-${r.id}`}><Trash2 className="w-4 h-4 text-destructive" /></Button> }])];
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">

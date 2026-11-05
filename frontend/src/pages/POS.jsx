@@ -21,6 +21,7 @@ import PaymentDialog from "@/components/pos/PaymentDialog";
 import CustomerDialog from "@/components/pos/CustomerDialog";
 import DiscountDialog from "@/components/pos/DiscountDialog";
 import ReceiptDialog from "@/components/pos/ReceiptDialog";
+import { UnlistedItem, NewItemsDialog } from "@/components/pos/UnlistedItem";
 import PinDialog from "@/components/pos/PinDialog";
 import TablesView from "@/components/pos/TablesView";
 import { OpenShiftDialog, CloseShiftDialog, CashDialog } from "@/components/pos/ShiftDialogs";
@@ -78,6 +79,8 @@ export default function POS() {
   const [pick, setPick] = useState(null);
   const [note, setNote] = useState(null);
   const [receipt, setReceipt] = useState(null);
+  const [newItems, setNewItems] = useState(null);
+  const addUnlisted = (it) => setCart((c) => ({ ...c, lines: [...c.lines, { key: uuid(), product_id: `custom_${uuid()}`, custom: true, name: it.name, unit_price: it.unit_price, qty: it.qty, tax_bps: 0, track_stock: false, sent_qty: 0 }] }));
   const [busy, setBusy] = useState(false);
   const [orders, setOrders] = useState([]);
   const [shiftSummary, setShiftSummary] = useState(null);
@@ -243,7 +246,7 @@ export default function POS() {
     const clientId = uuid();
     const payload = {
       client_id: clientId, receipt_no: nextReceipt(outlet.code), outlet_id: outlet.id, shift_id: shift?.id || null,
-      customer_id: cart.customer?.id || null, lines: cart.lines.map((l) => ({ product_id: l.product_id, qty: l.qty, unit_price: l.unit_price, manual_discount: l.manual_discount, note: l.note })),
+      customer_id: cart.customer?.id || null, lines: cart.lines.map((l) => ({ product_id: l.product_id, qty: l.qty, unit_price: l.unit_price, manual_discount: l.manual_discount, note: l.note, ...(l.custom ? { name: l.name } : {}) })),
       order_discount: cart.order_discount, voucher_code: cart.voucher?.code || null, points_redeemed: cart.points || 0, payments,
       created_at: ts, client_total: tt.total, order_id: cart.order?.id || null, table_id: cart.order?.table_id || null,
       channel: cart.order?.table_id ? "table" : "retail",
@@ -266,6 +269,7 @@ export default function POS() {
     patchStock(cart.lines.filter((l) => l.track_stock));
     if (cart.customer && cart.points) update((d) => ({ ...d, customers: d.customers.map((c) => (c.id === cart.customer.id ? { ...c, points: c.points - cart.points } : c)) }));
     setReceipt({ ...payload, totals: tt, offline, change: Math.max(paid - tt.total, 0), due: Math.max(tt.total - paid, 0), customer: cart.customer, table_name: cart.order?.table_name });
+    if (cart.lines.some((l) => l.custom)) setNewItems(cart.lines.filter((l) => l.custom));
     setCart(EMPTY); setDlg(null); setBusy(false); setMobileCart(false);
     loadOrders();
   };
@@ -355,7 +359,7 @@ export default function POS() {
         <section className={`lg:col-span-8 xl:col-span-9 min-h-0 ${mobileCart ? "hidden lg:block" : ""}`}>
           {mode === "tables"
             ? <TablesView tables={data.tables} orders={orders} currency={currency} onPick={pickTable} activeOrderId={cart.order?.id} />
-            : <ProductGrid products={data.products} categories={data.categories} currency={currency} hideOut={outlet.hide_out_of_stock} onAdd={addProduct} onScan={onScan} searchRef={searchRef} />}
+            : <div className="h-full flex flex-col"><div className="px-3 pt-2 flex justify-end"><UnlistedItem currency={currency} onAdd={addUnlisted} /></div><div className="flex-1 min-h-0"><ProductGrid products={data.products.filter((p) => !p.is_raw)} categories={data.categories} currency={currency} hideOut={outlet.hide_out_of_stock} onAdd={addProduct} onScan={onScan} searchRef={searchRef} /></div></div>}
         </section>
         <aside className={`lg:col-span-4 xl:col-span-3 border-s min-h-0 ${mobileCart ? "" : "hidden lg:block"}`}>
           <CartPanel cart={cart} totals={totals} currency={currency} business={biz} a={a} canPay={canPay} />
@@ -376,7 +380,8 @@ export default function POS() {
       <DiscountDialog open={dlg === "discount"} onOpenChange={(o) => !o && setDlg(null)} presets={data.rules.filter((r) => r.kind === "cashier" && r.active !== false)}
         subtotal={totals.subtotal} currency={currency} user={user} cart={cart} setCart={setCart} outlet={outlet} vouchers={data.vouchers} loyalty={biz.loyalty} />
       <PinDialog open={dlg === "pin"} onOpenChange={(o) => !o && setDlg(null)} title={t("switch_user")} onSubmit={pinSwitch} testid="switch-user-dialog" />
-      <ReceiptDialog receipt={receipt} onClose={() => setReceipt(null)} business={biz} outlet={outlet} />
+      <ReceiptDialog receipt={newItems ? null : receipt} onClose={() => setReceipt(null)} business={biz} outlet={outlet} />
+      {newItems && <NewItemsDialog items={newItems} currency={currency} onClose={() => setNewItems(null)} />}
       <PickDialog pick={pick} onClose={() => setPick(null)} />
       <NoteDialog note={note} onClose={() => setNote(null)} onSave={(v) => setCart((c) => ({ ...c, lines: c.lines.map((l, i) => (i === note.i ? { ...l, note: v } : l)) }))} />
     </div>

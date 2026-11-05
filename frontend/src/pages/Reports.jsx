@@ -39,8 +39,8 @@ export default function Reports() {
         {data && <ExportBtn onClick={() => exportCSV(name, data.columns, data.rows, c)} />}
         <Button variant="outline" onClick={() => window.print()} data-testid="print-report-btn"><Printer className="w-4 h-4 me-2" />PDF / print</Button>
       </PageHeader>
-      <div className="grid lg:grid-cols-[220px_1fr] gap-8">
-        <nav className="space-y-5" data-testid="report-list">
+      <div className="grid lg:grid-cols-[220px_1fr] gap-8 lg:items-start">
+        <nav className="space-y-5 no-print lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto pe-2" data-testid="report-list">
           {GROUPS.map(([g, items]) => (
             <div key={g}>
               <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1">{g}</div>
@@ -74,7 +74,8 @@ export default function Reports() {
               </ResponsiveContainer>
             </div>
           )}
-          <div className="print-area">
+          <div className="print-area print-wide">
+            <div className="print-only mb-3"><div className="font-bold text-lg">{business.name} — {title}</div><div className="text-sm">{data?.start} to {data?.end} · {oid === "all" ? "All branches" : (outlets || []).find((o) => o.id === oid)?.name}</div></div>
             {loading && !data ? <div className="text-muted-foreground">Loading…</div> : data && <DataTable columns={data.columns} rows={data.rows} currency={c} testid="report-table" />}
           </div>
         </div>

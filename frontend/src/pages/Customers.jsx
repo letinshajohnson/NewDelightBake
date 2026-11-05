@@ -42,7 +42,8 @@ function Detail({ id, onClose, currency, levels, canEdit, onSaved }) {
             {canEdit && form && (
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Name"><Input value={form.name} onChange={(e) => setF({ ...form, name: e.target.value })} data-testid="cust-name-input" /></Field>
-                <Field label="Phone"><Input value={form.phone} onChange={(e) => setF({ ...form, phone: e.target.value })} data-testid="cust-phone-input" /></Field>
+                <Field label="Phone (optional)"><Input value={form.phone} onChange={(e) => setF({ ...form, phone: e.target.value })} data-testid="cust-phone-input" /></Field>
+                <Field label="Email (optional)"><Input value={form.email} onChange={(e) => setF({ ...form, email: e.target.value })} data-testid="cust-email-input" /></Field>
                 <Field label="Level">
                   <Select value={form.level} onValueChange={(v) => setF({ ...form, level: v })}>
                     <SelectTrigger data-testid="cust-level-select"><SelectValue /></SelectTrigger>
@@ -82,9 +83,9 @@ export default function Customers() {
   const { data, reload } = useFetch("/customers");
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
-  const [n, setN] = useState({ name: "", phone: "" });
-  const add = async () => { try { await api.post("/customers", n); setN({ name: "", phone: "" }); reload(); } catch (e) { toast.error(errMsg(e)); } };
-  const rows = (data || []).filter((x) => !q || x.name.toLowerCase().includes(q.toLowerCase()) || x.phone?.includes(q));
+  const [n, setN] = useState({ name: "", phone: "", email: "" });
+  const add = async () => { try { await api.post("/customers", n); setN({ name: "", phone: "", email: "" }); reload(); } catch (e) { toast.error(errMsg(e)); } };
+  const rows = (data || []).filter((x) => !q || x.name.toLowerCase().includes(q.toLowerCase()) || x.phone?.includes(q) || x.email?.toLowerCase().includes(q.toLowerCase()));
   return (
     <div>
       <PageHeader title={t("customers")} sub="The points ledger is the balance: earned, redeemed, expired and adjusted are rows — the balance is their sum." />
@@ -92,10 +93,11 @@ export default function Customers() {
         <Input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" data-testid="customers-search-input" />
         <div className="flex-1" />
         <Input placeholder="Name" value={n.name} onChange={(e) => setN({ ...n, name: e.target.value })} className="w-40" data-testid="new-customer-name" />
-        <Input placeholder="Phone" value={n.phone} onChange={(e) => setN({ ...n, phone: e.target.value })} className="w-40" data-testid="new-customer-phone" />
+        <Input placeholder="Phone (optional)" value={n.phone} onChange={(e) => setN({ ...n, phone: e.target.value })} className="w-40" data-testid="new-customer-phone" />
+        <Input placeholder="Email (optional)" value={n.email} onChange={(e) => setN({ ...n, email: e.target.value })} className="w-48" data-testid="new-customer-email" />
         <Button disabled={!n.name} onClick={add} data-testid="add-customer-btn"><Plus className="w-4 h-4 me-1" />Add</Button>
       </div>
-      <DataTable columns={[{ key: "name", label: "Name" }, { key: "phone", label: "Phone" }, { key: "price_level", label: "Type", render: (r) => <Pill tone={r.price_level === "wholesale" ? "warn" : "muted"}>{r.price_level || "retail"}</Pill> }, { key: "level", label: "Level", render: (r) => r.level ? <Pill tone="info">{r.level}</Pill> : "—" },
+      <DataTable search={false} columns={[{ key: "name", label: "Name" }, { key: "phone", label: "Phone" }, { key: "email", label: "Email" }, { key: "price_level", label: "Type", render: (r) => <Pill tone={r.price_level === "wholesale" ? "warn" : "muted"}>{r.price_level || "retail"}</Pill> }, { key: "level", label: "Level", render: (r) => r.level ? <Pill tone="info">{r.level}</Pill> : "—" },
         { key: "store_credit", label: "Store credit", money: true }, { key: "credit_limit", label: "Credit limit", money: true }]} rows={rows} currency={c} testid="customers-table" onRow={(r) => setSel(r.id)} />
       <Detail id={sel} onClose={() => setSel(null)} currency={c} levels={business.levels || []} canEdit={isManager(user)} onSaved={reload} />
     </div>
