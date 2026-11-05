@@ -9,6 +9,7 @@ from seed import seed_all
 import sales
 import reports
 import backoffice
+import production
 
 app = FastAPI(title="POSHub")
 api = APIRouter(prefix="/api")
@@ -196,12 +197,12 @@ crud("roles", "roles", "rol_", ("owner",))
 
 # ---------------- Products ----------------
 PRODUCT_FIELDS = ("name", "sku", "barcode", "category_id", "price", "cost", "tax_bps", "image", "station", "track_stock", "low_stock", "points",
-                  "brand_id", "unit_id", "rack_id", "level_prices", "made_in_house")
+                  "brand_id", "unit_id", "rack_id", "level_prices", "made_in_house", "recipe", "batch_yield", "hsn", "is_kit", "is_raw")
 
 
 def _product_data(data):
     d = {k: data[k] for k in PRODUCT_FIELDS if k in data}
-    for k in ("price", "cost", "tax_bps", "low_stock", "points"):
+    for k in ("price", "cost", "tax_bps", "low_stock", "points", "batch_yield"):
         if k in d:
             d[k] = int(d[k] or 0)
     return d
@@ -345,6 +346,7 @@ async def root():
 api.include_router(sales.router)
 api.include_router(reports.router)
 api.include_router(backoffice.router)
+api.include_router(production.router)
 app.include_router(api)
 
 app.add_middleware(CORSMiddleware, allow_origins=[os.environ["FRONTEND_URL"]], allow_credentials=True,

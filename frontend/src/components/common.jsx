@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, errMsg } from "@/lib/api";
 import { fmt } from "@/lib/money";
 import { LANGS, useI18n } from "@/lib/i18n";
+import * as XLSX from "xlsx";
 import { useTheme } from "@/context/AuthContext";
 import { toast } from "sonner";
 
@@ -62,10 +63,17 @@ const cell = (c, r, currency) => {
   return v ?? "—";
 };
 
-export function exportCSV(name, columns, rows, currency) {
+export function exportCSV(name, columns, rows, currency, format = "csv") {
+  const val = (r, c) => (c.money && !r._count ? (r[c.key] || 0) / 10 ** (currency === "IDR" ? 0 : currency === "KWD" ? 3 : 2) : r[c.key]);
+  if (format === "xlsx") {
+    const ws = XLSX.utils.aoa_to_sheet([columns.map((c) => c.label), ...rows.map((r) => columns.map((c) => val(r, c) ?? ""))]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    XLSX.writeFile(wb, `${name}.xlsx`);
+    return;
+  }
   const esc = (s) => `"${String(s ?? "").replace(/"/g, '""')}"`;
-  const lines = [columns.map((c) => esc(c.label)).join(",")].concat(
-    rows.map((r) => columns.map((c) => esc(c.money && !r._count ? (r[c.key] || 0) / 10 ** (currency === "IDR" ? 0 : currency === "KWD" ? 3 : 2) : c.date ? r[c.key] : r[c.key])).join(",")));
+  const lines = [columns.map((c) => esc(c.label)).join(",")].concat(rows.map((r) => columns.map((c) => esc(val(r, c))).join(",")));
   const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);

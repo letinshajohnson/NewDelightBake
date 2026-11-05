@@ -12,7 +12,7 @@ import { api, errMsg } from "@/lib/api";
 import { fmt, toMinor, toMajorStr, pctStr, toBps } from "@/lib/money";
 import { PageHeader, DataTable, Field, useFetch, ExportBtn, exportCSV } from "@/components/common";
 
-const blank = { name: "", sku: "", barcode: "", category_id: "", price: "", cost: "", tax: "5", image: "", station: "none", track_stock: true, low_stock: "10", points: "0", brand_id: "", unit_id: "", rack_id: "", wholesale: "" };
+const blank = { name: "", sku: "", barcode: "", category_id: "", price: "", cost: "", tax: "5", image: "", station: "none", track_stock: true, is_raw: false, low_stock: "10", points: "0", brand_id: "", unit_id: "", rack_id: "", wholesale: "" };
 
 const Pick = ({ url, value, onChange, testid }) => {
   const { data } = useFetch(url);
@@ -61,6 +61,7 @@ function ProductForm({ edit, setEdit, cats, currency, onSaved }) {
             <Field label="Image URL" className="col-span-2"><Input value={edit.image || ""} onChange={set("image")} placeholder="/img/latte.jpg or https://…" data-testid="product-image-input" /></Field>
             <Field label="Low-stock alert at"><Input value={edit.low_stock} onChange={set("low_stock")} inputMode="numeric" data-testid="product-lowstock-input" /></Field>
             <label className="flex items-center gap-3 pt-6 text-sm"><Switch checked={edit.track_stock} onCheckedChange={(v) => setEdit({ ...edit, track_stock: v })} data-testid="product-track-stock-switch" />Track stock</label>
+            <label className="col-span-2 flex items-center gap-3 text-sm"><Switch checked={!!edit.is_raw} onCheckedChange={(v) => setEdit({ ...edit, is_raw: v })} data-testid="product-raw-switch" />Raw material (used in production, hidden from the till)</label>
             <Button className="col-span-2 h-11" onClick={save} disabled={!edit.name || !edit.price} data-testid="product-save-btn">Save product</Button>
           </div>
         )}

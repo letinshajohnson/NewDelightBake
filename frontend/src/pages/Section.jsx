@@ -11,6 +11,8 @@ import { BusinessTab, OutletsTab, StaffTab, TablesTab } from "@/pages/Settings";
 import { PurchaseOrders, PurchaseReturns } from "@/pages/Purchasing";
 import { Adjustments, StockTake, Transfers } from "@/pages/StockManager";
 import { CashList, PaymentMethods, Payables, SalesReturns, VoidedSales, BusinessObject } from "@/pages/Finance";
+import { Recipes, ProductionRuns, ImportExport } from "@/pages/Production";
+import BillScan from "@/pages/BillScan";
 
 const PERMS = ["pos", "sales.view", "sales.void", "returns", "customers", "catalog", "stock", "purchasing", "finance", "reports", "settings", "users", "shifts", "cost.view"]
   .map((p) => [p, p]);
@@ -36,8 +38,12 @@ export const SECTIONS = {
     ["racks", "Racks", () => <Crud endpoint="racks" title="rack" hint="Where goods sit in the store — floor, room and shelf name." fields={[{ key: "name", label: "Shelf name" }, { key: "floor", label: "Floor" }, { key: "room", label: "Room" }]} />],
     ["brands", "Brand", () => <Crud endpoint="brands" title="brand" hint="Brands help you filter sales reports by manufacturer — your own and other brands you resell." fields={[{ key: "name", label: "Brand" }, { key: "own", label: "Our own brand", type: "bool" }]} />],
   ]),
+  production: S("Production", "Recipes, production runs and gift kits for your own products.", [
+    ["runs", "Production runs", () => <ProductionRuns />], ["recipes", "Raw materials per item", () => <Recipes />], ["kits", "Gift packs & kits", () => <Recipes kits />],
+  ]),
+  data: S("Import / export", "Bring data in from Excel or CSV, read purchase bills from a photo, and take everything out.", [["all", "Import & export", () => <ImportExport />], ["scan", "Scan purchase bill", () => <BillScan />]]),
   purchasing: S("Purchasing", "Orders to suppliers, goods sent back, and cancelled orders.", [
-    ["orders", "Purchase orders", () => <PurchaseOrders />], ["returns", "Purchase returns", () => <PurchaseReturns />], ["cancelled", "Cancelled purchases", () => <PurchaseOrders cancelled />],
+    ["orders", "Purchase orders", () => <PurchaseOrders />], ["scan", "Bill from photo", () => <BillScan />], ["returns", "Purchase returns", () => <PurchaseReturns />], ["cancelled", "Cancelled purchases", () => <PurchaseOrders cancelled />],
   ]),
   sales: S("Sales", "Receipts from the register, goods brought back, and voided receipts.", [
     ["transactions", "Sales transactions", () => <Sales />], ["returns", "Sales returns", () => <SalesReturns />], ["voided", "Voided sales", () => <VoidedSales />],
@@ -45,12 +51,12 @@ export const SECTIONS = {
   crm: S("CRM", "Who buys, who supplies, and the loyalty programme that ties them in.", [
     ["customers", "Customers", () => <Customers />],
     ["levels", "Customer levels", () => <Crud endpoint="levels" title="level" hint="Tiered levels are reached automatically by points; flat levels are given by hand." fields={[{ key: "name", label: "Level" }, { key: "kind", label: "Type", type: "select", options: [["tiered", "Tiered (by points)"], ["flat", "Flat (by hand)"]] }, { key: "min_points", label: "Points needed", type: "number" }]} />],
-    ["suppliers", "Suppliers", () => <Crud endpoint="suppliers" title="supplier" hint="Goods suppliers and their payment terms." fields={[{ key: "name", label: "Supplier" }, { key: "phone", label: "Phone" }, { key: "terms_days", label: "Payment terms (days)", type: "number" }, { key: "gstin", label: "GSTIN" }]} />],
+    ["suppliers", "Suppliers & agents", () => <Crud endpoint="suppliers" title="supplier" hint="Goods suppliers and agents, their GST number and payment terms." fields={[{ key: "name", label: "Supplier / agent" }, { key: "type", label: "Type", type: "select", options: [["supplier", "Supplier"], ["agent", "Agent"]] }, { key: "phone", label: "Phone" }, { key: "terms_days", label: "Payment terms (days)", type: "number" }, { key: "gstin", label: "GST registration no. (optional)" }, { key: "address", label: "Address", table: false }]} />],
     ["loyalty", "Loyalty points", () => <Loyalty />],
     ["rewards", "Rewards", () => <Crud endpoint="rewards" title="reward" hint="What customers can redeem their points for." fields={[{ key: "name", label: "Reward" }, { key: "kind", label: "Kind", type: "select", options: [["discount", "Discount"], ["product", "Free product"], ["delivery", "Free delivery"], ["custom", "Custom"]] }, { key: "points", label: "Points cost", type: "number" }, { key: "description", label: "Description" }]} />],
   ]),
   finance: S("Finance", "Money in and out beyond the till, the accounts it sits in, and its categories.", [
-    ["cash-in", "Cash in", () => <CashList type="in" />], ["cash-out", "Cash out", () => <CashList type="out" />], ["methods", "Payment methods", () => <PaymentMethods />],
+    ["cash-in", "Cash in", () => <CashList type="in" />], ["cash-out", "Other expenses", () => <CashList type="out" />], ["methods", "Payment methods", () => <PaymentMethods />],
     ["categories", "Categories", () => <Crud endpoint="cash-categories" title="category" hint="Name your own income and expense types; the shift summary groups by them." fields={[{ key: "name", label: "Name" }, { key: "type", label: "Type", type: "select", options: [["in", "Income (cash in)"], ["out", "Expense (cash out)"]] }]} />],
   ]),
   payables: S("Payables & receivables", "Created automatically from credit sales and unpaid purchases.", [["all", "Overview", () => <Payables />]]),

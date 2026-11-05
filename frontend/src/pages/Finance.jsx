@@ -22,15 +22,16 @@ export function CashList({ type }) {
     catch (e) { toast.error(errMsg(e)); }
   };
   const rows = (data || []).filter((x) => x.type === type && (!q || `${x.category} ${x.note || ""}`.toLowerCase().includes(q.toLowerCase())));
-  const catOpts = (cats || []).filter((x) => x.type === type).map((x) => ({ id: x.name, name: x.name }));
+  const catOpts = (cats || []).filter((x) => x.type === type).map((x) => x.name);
+  const sugg = [...new Set([...catOpts, ...(type === "out" ? ["Staff salary", "Rent", "Miscellaneous purchase"] : [])])];
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
         <Field label="Outlet"><Sel value={f.outlet_id} onChange={(v) => setF({ ...f, outlet_id: v })} options={outlets || []} testid={`cash-${type}-outlet`} /></Field>
-        <Field label="Category"><Sel value={f.category} onChange={(v) => setF({ ...f, category: v })} options={catOpts} testid={`cash-${type}-category`} /></Field>
+        <Field label="Category"><Input list={`cash-${type}-cats`} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} placeholder={type === "out" ? "e.g. Staff salary" : "Choose or type"} data-testid={`cash-${type}-category`} /><datalist id={`cash-${type}-cats`}>{sugg.map((n) => <option key={n} value={n} />)}</datalist></Field>
         <Field label="Amount"><Input value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} data-testid={`cash-${type}-amount`} /></Field>
         <Field label="Date"><Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} data-testid={`cash-${type}-date`} /></Field>
-        <Field label="Note"><Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} data-testid={`cash-${type}-note`} /></Field>
+        <Field label={type === "out" ? "Note (paid to / what for)" : "Note"}><Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} data-testid={`cash-${type}-note`} /></Field>
         <Button onClick={add} disabled={!toMinor(f.amount, c) || !f.category} data-testid={`cash-${type}-save`}>Record cash {type}</Button>
       </div>
       <Input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" data-testid={`cash-${type}-search`} />

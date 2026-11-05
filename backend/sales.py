@@ -136,6 +136,10 @@ async def stock_check(data: dict = Body(...), user=Depends(get_user)):
     need = {}
     for ln in data.get("lines", []):
         need[ln["product_id"]] = need.get(ln["product_id"], 0) + ln["qty"]
+    async for k in db.products.find({"business_id": bid, "id": {"$in": list(need)}, "is_kit": True}):
+        q = need.pop(k["id"])
+        for r in k.get("recipe") or []:
+            need[r["product_id"]] = need.get(r["product_id"], 0) - (-int(r["qty"]) * q // max(int(k.get("batch_yield") or 1), 1))
     prods = {p["id"]: p for p in await db.products.find({"business_id": bid, "id": {"$in": list(need)}}).to_list(1000)}
     levels = {l["product_id"]: l["qty"] for l in await db.stock_levels.find({"business_id": bid, "outlet_id": data["outlet_id"], "product_id": {"$in": list(need)}}).to_list(1000)}
     short = [{"product_id": pid, "name": prods[pid]["name"], "available": levels.get(pid, 0), "requested": q}
@@ -240,6 +244,22 @@ async def process_sale(user, p, offline):
     strict = not outlet.get("allow_negative_stock") and not offline
     moved = []
     for l in t["lines"]:
+        pr = prods[l["product_id"]]
+        if pr.get("is_kit") and pr.get("recipe"):
+            per, cost, l["kit_used"] = max(int(pr.get("batch_yield") or 1), 1), 0, []
+            for r in pr["recipe"]:
+                q = -(-int(r["qty"]) * l["qty"] // per)
+                c = await move_stock(bid, outlet["id"], r["product_id"], -q, "sale", sale_id, strict=strict, note=f"in {pr['name']}", ts=p["created_at"])
+                if c is None:
+                    for pid, mq in moved:
+                        await db.stock_levels.update_one({"business_id": bid, "outlet_id": outlet["id"], "product_id": pid}, {"$inc": {"qty": mq}})
+                    await db.stock_ledger.delete_many({"ref_id": sale_id})
+                    raise HTTPException(409, f"Not enough {r.get('name') or 'items'} for {l['name']}")
+                moved.append((r["product_id"], q))
+                l["kit_used"].append({"product_id": r["product_id"], "qty": q, "unit_cost": c})
+                cost += c * q
+            l["track_stock"], l["unit_cost"] = False, cost // l["qty"]
+            continue
         if not l["track_stock"]:
             l["unit_cost"] = 0
             continue
@@ -417,6 +437,8 @@ async def void_sale(sid: str, data: dict = Body(...), user=Depends(get_user)):
         raise HTTPException(400, "Sale has returns and cannot be voided")
     vid = uid("void_")
     for l in s["lines"]:
+        for k in l.get("kit_used") or []:
+            await move_stock(bid, s["outlet_id"], k["product_id"], k["qty"], "void", vid, cost=None)
         if l.get("track_stock", True):
             await move_stock(bid, s["outlet_id"], l["product_id"], l["qty"], "void", vid, cost=None)
     if s.get("customer_id"):
@@ -455,6 +477,8 @@ async def return_sale(sid: str, data: dict = Body(...), user=Depends(get_user)):
         amt = rdiv(sl["line_total"] * q, sl["qty"])
         out.append({"index": i, "product_id": sl["product_id"], "name": sl["name"], "qty": q, "amount": amt, "unit_cost": sl.get("unit_cost", 0)})
         amount += amt
+        for k in sl.get("kit_used") or []:
+            await move_stock(bid, s["outlet_id"], k["product_id"], rdiv(k["qty"] * q, sl["qty"]), "return", rid, cost=k["unit_cost"])
         if sl.get("track_stock", True):
             await move_stock(bid, s["outlet_id"], sl["product_id"], q, "return", rid, cost=sl.get("unit_cost", 0))
     if not out:

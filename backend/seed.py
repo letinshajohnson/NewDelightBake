@@ -76,7 +76,7 @@ async def seed_all():
     await ins("rewards", [{"name": "Free cupcake", "kind": "custom", "points": 50, "description": "One cupcake of the day"},
                           {"name": "₹50 off", "kind": "discount", "type": "fixed", "value": 5000, "points": 50}])
     await ins("cash_categories", [{"name": n, "type": "in"} for n in ("Capital", "Refund received", "Other income")] +
-              [{"name": n, "type": "out"} for n in ("Fuel", "Water", "Small repairs", "Packaging material", "Electricity")])
+              [{"name": n, "type": "out"} for n in ("Staff salary", "Rent", "Miscellaneous purchase", "Fuel", "Water", "Small repairs", "Packaging material", "Electricity")])
     await ins("taxes", [{"name": "GST 5%", "rate_bps": 500, "components": [{"name": "CGST", "rate_bps": 250}, {"name": "SGST", "rate_bps": 250}]},
                         {"name": "GST 18%", "rate_bps": 1800, "components": [{"name": "CGST", "rate_bps": 900}, {"name": "SGST", "rate_bps": 900}]}])
     await ins("charges", [{"name": "Packaging", "type": "fixed", "value": 1000, "taxable": False}, {"name": "Home delivery", "type": "fixed", "value": 4000, "taxable": False}])

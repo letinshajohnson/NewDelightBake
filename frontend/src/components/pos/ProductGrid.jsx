@@ -34,7 +34,7 @@ export default function ProductGrid({ products, categories, currency, hideOut, o
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return products.filter((p) => (cat === "all" || p.category_id === cat)
+    return products.filter((p) => !p.is_raw && (cat === "all" || p.category_id === cat)
       && (!hideOut || p.track_stock === false || (p.stock || 0) > 0)
       && (!s || p.name.toLowerCase().includes(s) || p.barcode?.includes(s) || p.sku?.toLowerCase().includes(s)));
   }, [products, cat, q, hideOut]);

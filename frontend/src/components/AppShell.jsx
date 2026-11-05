@@ -7,10 +7,10 @@ import { useI18n } from "@/lib/i18n";
 import { ThemeToggle, LangSelect, Pill } from "@/components/common";
 
 const NAV = [
-  ["dashboard", "Dashboard", LayoutDashboard, true], ["catalog", "Catalog", Package, true], ["purchasing", "Purchasing", Truck, true],
+  ["dashboard", "Dashboard", LayoutDashboard, true], ["catalog", "Catalog", Package, true], ["production", "Production", ChefHat, true], ["purchasing", "Purchasing", Truck, true],
   ["sales", "Sales", Receipt, false], ["crm", "CRM", Contact, false], ["finance", "Finance", Landmark, true], ["payables", "Payables & receivables", Scale, true],
   ["stock", "Stock manager", Boxes, true], ["promotions", "Promotions", BadgePercent, true], ["shifts", "Shifts", Wallet, false],
-  ["reports", "Reports", BarChart3, true], ["settings", "Settings", Settings, true], ["users", "Users", UserCog, true],
+  ["reports", "Reports", BarChart3, true], ["data", "Import / export", Users, true], ["settings", "Settings", Settings, true], ["users", "Users", UserCog, true],
 ];
 
 function SideNav({ onNav }) {
