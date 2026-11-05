@@ -1,0 +1,49 @@
+{
+  "summary": "Tested the new features for New Delight: AI purchase-bill scan (2 Gemini calls in total, one from the API and one from the UI), universal import (purchase/products/expenses), gift kits in POS sales (component stock drop, void, partial return, 409 + rollback, stock/check explode), production runs, plus the UI for Import/export, Scan bill, Products raw switch, Gift-kit tab, Other expenses and Suppliers & agents. All core flows work. Found 1 critical frontend bug (CSV dates were reformatted to M/D/YY, which broke CSV purchase import and stored invalid expense dates). I fixed it with a one-line change and retested it. Also found 4 backend input-validation bugs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/import/purchase (and products, via _find_or_make)", "issue": "Names go into a Mongo $regex without re.escape. Item 'TEST_Cake (500g)+x' imported twice created 2 duplicate products. A name like 'SANDWICH VEG.' can also match the wrong product, and an unbalanced '(' or '[' can cause a 500. Fix: use re.escape(name.strip())."},
+      {"endpoint": "POST /api/import/purchase|products", "issue": "gst='5%' (or any non-numeric qty/rate/terms_days) returns 500 from int(float(...)). Import is not atomic either: groups processed before the bad row stay committed. Fix: validate and parse all rows first, then return 400 naming the row."},
+      {"endpoint": "POST /api/import/purchase", "issue": "No outlet_id still returns 200 and books stock to outlet None, leaving an orphan stock_level. The UI blocks this, but the API should return 400."},
+      {"endpoint": "POST /api/production", "issue": "No outlet_id gives 500 (KeyError data['outlet_id']). Should be 400."},
+      {"endpoint": "POST /api/import/expenses", "issue": "The date is not validated against YYYY-MM-DD (unlike purchase). A bad date is stored as created_at, e.g. '11/3/25T06:30:00+00:00', and the row then silently drops out of every report range filter. The import also has no outlet selector in the UI, so outlet_id is stored as ''."},
+      {"endpoint": "POST /api/import/purchase", "issue": "Products created from a bill with MRP 0 (common: the scanned sample has MRP 0 on all lines) get price 0. They then show in the POS at ₹0. Consider leaving price empty or flagging 'needs price'. Existing supplier GSTIN and existing product cost/HSN are never updated on re-import."},
+      {"endpoint": "Deletion endpoints", "issue": "There is no delete/cancel endpoint for cash_entries (expenses), received purchase orders or production runs, so a user who imports wrong data cannot undo it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ImportExport readSheet (Production.jsx)", "issue": "FIXED BY TESTER: CSV files with YYYY-MM-DD dates were parsed by SheetJS into M/D/YY ('2026-10-31' became '10/31/26'). This made every CSV purchase import fail with 'Date must be YYYY-MM-DD', including the app's own CSV template, and stored invalid expense dates. Fix: added dateNF:'yyyy-mm-dd' to XLSX.read options. CSV purchase and xlsx date-cell imports were retested and both give YYYY-MM-DD.", "selector": "[data-testid=import-file-input]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Finance > Other expenses / Production runs", "issues": ["The Date field uses the browser's native date picker instead of the shadcn Calendar.", "Back-office expenses show the time '6:30:00 AM' (an artefact of the T06:30Z timestamp). Show the date only."]},
+      {"screen": "CRM > Suppliers & agents", "issues": ["Empty phone/GST shows blank for UI-created rows but '—' for others (inconsistent).", "Imported suppliers have no type, so the column shows '—'. Default to 'supplier'."]},
+      {"screen": "Sidebar", "issues": ["'Import / export' uses a people/users icon. Use an upload/download icon."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_production_import_kits.py", "/app/backend/tests/ui_verify_cleanup.py", "/app/test_reports/pytest/iter3_results.xml"],
+  "action_items": [
+    "Use re.escape in _find_or_make (production.py:56) to stop duplicates and regex errors",
+    "Validate all import rows before writing (numbers, dates for expenses too) and return 400 instead of 500. Ideally make the import all-or-nothing",
+    "Return 400 when outlet_id is missing in /import/purchase and /production",
+    "Decide what price to give products created from bills with MRP 0 (currently ₹0 and sellable in the POS)",
+    "Optional: add delete/reverse for expenses, imported purchases and production runs",
+    "Keep the tester's dateNF fix in Production.jsx readSheet"
+  ],
+  "critical_code_review_comments": [
+    "production.py _find_or_make: unescaped regex built from user input (also a ReDoS/injection risk).",
+    "production.py import_rows: int(r.get('terms_days')) and int(float(gst)) are unguarded, so bad input gives 500.",
+    "Recipes (Production.jsx) save sends is_kit:false from the 'Raw materials per item' tab. Picking an existing kit there silently turns it into a recipe and leaves track_stock:false.",
+    "Production does not check raw-material stock (non-strict move_stock), so materials can go negative without warning. Confirm this is intended.",
+    "Kit logic in sales.py (process_sale, void, return, stock_check) is correct: ceil division per batch_yield, rollback on 409, proportional return restore."
+  ],
+  "updated_files": ["/app/frontend/src/pages/Production.jsx (readSheet: XLSX.read dateNF)", "/app/backend/tests/test_production_import_kits.py", "/app/backend/tests/ui_verify_cleanup.py"],
+  "success_rate": {"backend": "13/17 tests passed (76%); the 4 failures are input-validation edge cases. All requested core flows pass", "frontend": "100% of the requested flows after the CSV date fix (1 bug found and fixed)"},
+  "seed_data_creation": "No seeding. TEST_ products and suppliers were archived through the API. TEST cash entries (expenses) and the orphan outlet-None stock_level were deleted by id. Still left (no delete endpoint): received POs with invoices TEST-INV-*, TEST-INV2..4-*, TEST-SCAN-UI-1 (PO-00011), TEST-UICSV-1 (PO-00012); 1 TEST production run; voided and returned TEST sales at Manufacturing Unit 1; their stock-ledger rows on archived TEST products.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=<url> pytest tests/test_production_import_kits.py -n 0. test_scan_bill calls Gemini (~25s, costs credits); deselect it with -k 'not test_scan_bill' unless scan is under test. The 4 expected failures (special-char names, gst '5%', missing outlet on purchase import and production) should pass once the validation fixes land. Business date is in Nov 2026 (server clock). Outlets: Manufacturing Unit 1 and Retail Shop 1, both with allow_negative_stock false. Sample bill /tmp/bill.jpg is read as supplier Pynadath Ventures, GSTIN 32AASFP1968L1ZM, 6 items, net ₹739.",
+  "rca of the issue": "CSV date bug: SheetJS XLSX.read parses CSV text that looks like a date into a date cell, formatted with the default 'm/d/yy'. sheet_to_json's dateNF only affects cells without a format, so raw:false returned '10/31/26'. Passing dateNF to XLSX.read sets the format used at parse time. Repro: upload a CSV with date 2026-10-31 under Purchase bills; before the fix this gave a 'Date must be YYYY-MM-DD (got 10/31/26)' toast."
+}

@@ -1,6 +1,6 @@
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { LayoutDashboard, Package, Boxes, BadgePercent, Users, Receipt, Wallet, BarChart3, Settings, MonitorSmartphone, ChefHat, LogOut, Menu, X, Truck, Contact, Landmark, Scale, UserCog } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, BadgePercent, Users, Receipt, Wallet, BarChart3, Settings, MonitorSmartphone, ChefHat, LogOut, Menu, X, Truck, Contact, Landmark, Scale, UserCog, ArrowDownUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth, isManager } from "@/context/AuthContext";
 import { useI18n } from "@/lib/i18n";
@@ -10,7 +10,7 @@ const NAV = [
   ["dashboard", "Dashboard", LayoutDashboard, true], ["catalog", "Catalog", Package, true], ["production", "Production", ChefHat, true], ["purchasing", "Purchasing", Truck, true],
   ["sales", "Sales", Receipt, false], ["crm", "CRM", Contact, false], ["finance", "Finance", Landmark, true], ["payables", "Payables & receivables", Scale, true],
   ["stock", "Stock manager", Boxes, true], ["promotions", "Promotions", BadgePercent, true], ["shifts", "Shifts", Wallet, false],
-  ["reports", "Reports", BarChart3, true], ["data", "Import / export", Users, true], ["settings", "Settings", Settings, true], ["users", "Users", UserCog, true],
+  ["reports", "Reports", BarChart3, true], ["data", "Import / export", ArrowDownUp, true], ["settings", "Settings", Settings, true], ["users", "Users", UserCog, true],
 ];
 
 function SideNav({ onNav }) {

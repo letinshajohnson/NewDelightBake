@@ -15,6 +15,8 @@ async def produce(data: dict = Body(...), user=Depends(require(*MANAGERS))):
     bid = user["business_id"]
     p = await db.products.find_one({"id": data.get("product_id"), "business_id": bid}, {"_id": 0})
     batches, made = int(data.get("batches") or 0), int(data.get("produced_qty") or 0)
+    if not data.get("outlet_id") or not await db.outlets.find_one({"id": data["outlet_id"], "business_id": bid}):
+        raise HTTPException(400, "Choose the outlet / unit")
     if not p or not p.get("recipe") or p.get("is_kit") or batches <= 0 or made <= 0:
         raise HTTPException(400, "Pick a product with a recipe, batches and quantity produced")
     rid = uid("prod_")
@@ -53,7 +55,7 @@ async def runs(user=Depends(require(*MANAGERS))):
 
 
 async def _find_or_make(bid, coll, name, extra=None):
-    d = await db[coll].find_one({"business_id": bid, "name": {"$regex": f"^{name.strip()}$", "$options": "i"}}, {"_id": 0})
+    d = await db[coll].find_one({"business_id": bid, "name": {"$regex": f"^{re.escape(name.strip())}$", "$options": "i"}}, {"_id": 0})
     if d:
         return d
     d = {"id": uid(coll[:3] + "_"), "business_id": bid, "name": name.strip(), "created_at": now_iso(), **(extra or {})}
@@ -68,16 +70,37 @@ def money(v):
     return int(i or 0) * 100 + int((f + "00")[:2] or 0)
 
 
+NUMS = ("qty", "rate", "mrp", "gst", "price", "cost", "amount", "terms_days")
+
+
+def _clean(rows):
+    out = []
+    for i, r in enumerate(rows, start=2):
+        r = {k.strip().lower(): (v or "").strip() if isinstance(v, str) else ("" if v is None else str(v)) for k, v in r.items()}
+        for k in NUMS:
+            if r.get(k):
+                r[k] = r[k].replace(",", "").replace("%", "").replace("₹", "").strip()
+                try:
+                    float(r[k])
+                except ValueError:
+                    raise HTTPException(400, f"Row {i}: {k} must be a number (got {r[k]})")
+        for k in ("date", "due_date"):
+            if r.get(k) and not re.match(r"^\d{4}-\d{2}-\d{2}$", r[k]):
+                raise HTTPException(400, f"Row {i}: {k} must be YYYY-MM-DD (got {r[k]})")
+        out.append(r)
+    return out
+
+
 @router.post("/import/{kind}")
 async def import_rows(kind: str, data: dict = Body(...), user=Depends(require(*MANAGERS))):
     bid = user["business_id"]
-    rows = [{k.strip().lower(): (v or "").strip() if isinstance(v, str) else v for k, v in r.items()} for r in data.get("rows", [])]
+    rows = _clean(data.get("rows", []))
     n = 0
     if kind in ("customers", "suppliers"):
         for r in rows:
             if r.get("name"):
                 await db[kind].insert_one({"id": uid(kind[:3] + "_"), "business_id": bid, "name": r["name"], "phone": r.get("phone"), "gstin": r.get("gstin") or None,
-                                           "type": r.get("type") or None, "terms_days": int(r.get("terms_days") or 0), "created_at": now_iso()})
+                                           "type": r.get("type") or ("supplier" if kind == "suppliers" else None), "terms_days": int(float(r.get("terms_days") or 0)), "created_at": now_iso()})
                 n += 1
     elif kind == "products":
         for r in rows:
@@ -95,27 +118,31 @@ async def import_rows(kind: str, data: dict = Body(...), user=Depends(require(*M
             amt = money(r.get("amount"))
             if amt <= 0:
                 continue
-            await db.cash_entries.insert_one({"id": uid("cash_"), "business_id": bid, "outlet_id": data.get("outlet_id"), "shift_id": None, "type": "out",
+            await db.cash_entries.insert_one({"id": uid("cash_"), "business_id": bid, "outlet_id": data.get("outlet_id") or None, "shift_id": None, "type": "out",
                                               "category": r.get("category") or "Other", "method": r.get("method") or "cash", "amount": amt, "note": r.get("note"),
                                               "user_id": user["id"], "user_name": user["name"], "created_at": f"{r['date']}T06:30:00+00:00" if r.get("date") else now_iso()})
             n += 1
     elif kind == "purchase":
         b = await get_business(bid)
         outlet = data.get("outlet_id")
+        if not outlet or not await db.outlets.find_one({"id": outlet, "business_id": bid}):
+            raise HTTPException(400, "Choose the outlet that receives the stock")
         groups = {}
         for r in rows:
-            if r.get("date") and not re.match(r"^\d{4}-\d{2}-\d{2}$", str(r["date"])):
-                raise HTTPException(400, f"Date must be YYYY-MM-DD (got {r['date']})")
             if r.get("item") and r.get("invoice_no"):
                 groups.setdefault((r.get("supplier") or "Unknown supplier", r["invoice_no"]), []).append(r)
         for (sname, inv), items in groups.items():
-            sup = await _find_or_make(bid, "suppliers", sname, {"gstin": items[0].get("supplier_gstin") or None})
+            sup = await _find_or_make(bid, "suppliers", sname, {"gstin": items[0].get("supplier_gstin") or None, "type": "supplier"})
+            if items[0].get("supplier_gstin") and not sup.get("gstin"):
+                await db.suppliers.update_one({"id": sup["id"]}, {"$set": {"gstin": items[0]["supplier_gstin"]}})
             brand = await _find_or_make(bid, "brands", "[Other brand]")
             cat = await _find_or_make(bid, "categories", "Other Brands")
             lines = []
             for r in items:
-                p = await _find_or_make(bid, "products", r["item"], {"category_id": cat["id"], "brand_id": brand["id"], "hsn": r.get("hsn"), "price": money(r.get("mrp")),
-                                                                     "cost": money(r.get("rate")), "tax_bps": int(float(r.get("gst") or 0) * 100), "track_stock": True, "low_stock": 5})
+                gst = int(float(r.get("gst") or 0) * 100)
+                price = money(r.get("mrp")) or money(r.get("rate")) * (10000 + gst) // 10000
+                p = await _find_or_make(bid, "products", r["item"], {"category_id": cat["id"], "brand_id": brand["id"], "hsn": r.get("hsn"), "price": price,
+                                                                     "cost": money(r.get("rate")), "tax_bps": gst, "track_stock": True, "low_stock": 5})
                 q = int(float(r.get("qty") or 0))
                 await move_stock(bid, outlet, p["id"], q, "purchase", inv, cost=money(r.get("rate")), note=f"{sname} {inv}")
                 lines.append({"product_id": p["id"], "name": p["name"], "qty": q, "cost": money(r.get("rate")), "received": q, "hsn": r.get("hsn"), "gst_bps": int(float(r.get("gst") or 0) * 100)})

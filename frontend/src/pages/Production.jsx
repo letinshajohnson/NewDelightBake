@@ -96,7 +96,7 @@ const SAMPLES = {
 const LABELS = { purchase: "Purchase bills", products: "Products & raw materials", customers: "Customers", suppliers: "Suppliers & agents", expenses: "Expenses" };
 
 async function readSheet(file) {
-  const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
+  const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true, dateNF: "yyyy-mm-dd" });
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
   return rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.replace(/^\ufeff/, "").trim().toLowerCase(), String(v).trim()])));
 }
@@ -142,7 +142,7 @@ export function ImportExport() {
         <div className="text-xs uppercase tracking-widest text-muted-foreground pt-2">Import</div>
         <div className="flex flex-wrap gap-2">{Object.keys(TEMPLATES).map((k) => <Button key={k} size="sm" variant={kind === k ? "default" : "outline"} onClick={() => { setKind(k); setRows([]); setFile(""); }} data-testid={`import-kind-${k}`}>{LABELS[k]}</Button>)}</div>
         <p className="text-sm text-muted-foreground">Columns: <code>{TEMPLATES[kind].join(", ")}</code>. Dates as YYYY-MM-DD, amounts in rupees.{kind === "purchase" && " One row per bill line, like your GST invoices (HSN, MRP, Qty, Rate before GST, GST %). Rows with the same supplier + invoice no. become one received purchase; new items and suppliers are created automatically. Have a photo instead? Use the Scan purchase bill tab."}{kind === "products" && " Put yes in raw_material for flour, eggs, packing etc."}</p>
-        {needOutlet && <Field label="Receive stock into"><Sel value={outlet} onChange={setOutlet} options={outlets || []} testid="import-outlet-select" /></Field>}
+        {(needOutlet || kind === "expenses") && <Field label={needOutlet ? "Receive stock into" : "Outlet (optional)"}><Sel value={outlet} onChange={setOutlet} options={outlets || []} testid="import-outlet-select" /></Field>}
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={template} data-testid="import-template-btn"><Download className="w-4 h-4 me-2" />Template</Button>
           <label className="inline-flex items-center gap-2 px-4 h-9 border rounded-md text-sm cursor-pointer hover:bg-accent" data-testid="import-file-label"><Upload className="w-4 h-4" />{file || "Choose Excel or CSV"}

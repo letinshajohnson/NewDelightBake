@@ -1,4 +1,4 @@
-# Test Credentials — POSHub (business "Chai & Co. Café", INR, restaurant mode on)
+# Test Credentials — POSHub (business "New Delight Food Products", INR)
 
 | Role | Email | Password | PIN | Branch |
 |---|---|---|---|---|
